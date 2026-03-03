@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionSafe } from "@/lib/session";
 import { getNavItems } from "@/lib/nav";
-import { DashboardShell } from "@/components/dashboard";
+import { AppShell } from "@/components/app";
 
 export default async function AppLayout({
   children,
@@ -17,8 +17,8 @@ export default async function AppLayout({
   const navItems = getNavItems(user.role);
 
   return (
-    <DashboardShell user={user} navItems={navItems}>
+    <AppShell user={user} navItems={navItems}>
       {children}
-    </DashboardShell>
+    </AppShell>
   );
 }
