@@ -1,15 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   Menu,
   Search,
   LogOut,
   Briefcase,
-  ChevronRight,
   User,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/types";
@@ -36,81 +33,76 @@ export function Topbar({ user, pageTitle, onMenuClick }: TopbarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 lg:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-xl px-4 lg:px-5">
       {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="lg:hidden"
+      <button
         onClick={onMenuClick}
+        className="lg:hidden p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
       >
         <Menu className="h-5 w-5" />
         <span className="sr-only">Toggle menu</span>
-      </Button>
+      </button>
 
       {/* Logo - desktop */}
-      <div className="hidden lg:flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-          <Briefcase className="h-4 w-4 text-primary-foreground" />
+      <div className="hidden lg:flex items-center gap-2.5">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground">
+          <Briefcase className="h-3.5 w-3.5 text-background" />
         </div>
-        <span className="font-semibold">IPA</span>
+        <span className="font-semibold text-sm">IPA</span>
       </div>
 
-      {/* Breadcrumb / Page title */}
-      <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-        <ChevronRight className="h-4 w-4" />
-        <span className="font-medium text-foreground">{pageTitle}</span>
+      {/* Divider + Page title */}
+      <div className="hidden sm:flex items-center gap-3 text-sm">
+        <span className="text-border">/</span>
+        <span className="font-medium">{pageTitle}</span>
       </div>
+
+      {/* Spacer */}
+      <div className="flex-1" />
 
       {/* Search */}
-      <div className="flex-1 flex justify-center max-w-md mx-auto">
-        <div className="relative w-full hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            className="w-full pl-9 h-9 bg-muted/50 border-0 focus-visible:ring-1"
-          />
-        </div>
+      <div className="hidden md:flex items-center">
+        <button className="flex items-center gap-2 h-8 px-3 rounded-lg border bg-muted/40 text-muted-foreground text-sm hover:bg-muted transition-colors">
+          <Search className="h-3.5 w-3.5" />
+          <span>Search...</span>
+          <kbd className="ml-4 pointer-events-none hidden sm:inline-flex h-5 items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+            ⌘K
+          </kbd>
+        </button>
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {/* Search icon mobile */}
-        <Button variant="ghost" size="icon" className="md:hidden">
-          <Search className="h-5 w-5" />
-        </Button>
+        <button className="md:hidden p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+          <Search className="h-4 w-4" />
+        </button>
 
         <ThemeToggle />
 
         {/* User menu */}
-        <div className="hidden sm:flex items-center gap-3 pl-3 border-l">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-              <User className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-1 ml-1 pl-2 border-l">
+          <div className="hidden sm:flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-accent transition-colors cursor-default">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+              <User className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <div className="hidden lg:block">
               <p className="text-sm font-medium leading-none">{user.name}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 {formatRole(user.role)}
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleLogout}>
+          
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Logout"
+          >
             <LogOut className="h-4 w-4" />
             <span className="sr-only">Logout</span>
-          </Button>
+          </button>
         </div>
-
-        {/* Mobile logout */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleLogout}
-          className="sm:hidden"
-        >
-          <LogOut className="h-5 w-5" />
-        </Button>
       </div>
     </header>
   );

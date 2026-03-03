@@ -1,6 +1,5 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { LucideIcon } from "lucide-react";
+import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 
 interface StatCardProps {
   title: string;
@@ -20,31 +19,42 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <Card className={cn("", className)}>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
-            {description && (
+    <div
+      className={cn(
+        "rounded-xl border bg-card p-5 transition-all duration-200 hover:shadow-sm",
+        className
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-2xl font-semibold tracking-tight">{value}</p>
+          {description && (
+            <div className="flex items-center gap-1">
+              {trend === "up" && (
+                <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              )}
+              {trend === "down" && (
+                <TrendingDown className="h-3 w-3 text-red-600 dark:text-red-400" />
+              )}
               <p
                 className={cn("text-xs", {
-                  "text-green-600 dark:text-green-400": trend === "up",
+                  "text-emerald-600 dark:text-emerald-400": trend === "up",
                   "text-red-600 dark:text-red-400": trend === "down",
                   "text-muted-foreground": trend === "neutral" || !trend,
                 })}
               >
                 {description}
               </p>
-            )}
-          </div>
-          {Icon && (
-            <div className="rounded-md bg-muted p-2">
-              <Icon className="h-5 w-5 text-muted-foreground" />
             </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+        {Icon && (
+          <div className="rounded-lg bg-muted/50 p-2.5">
+            <Icon className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

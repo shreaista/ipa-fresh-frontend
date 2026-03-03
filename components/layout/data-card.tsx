@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface DataCardProps {
@@ -10,12 +9,17 @@ interface DataCardProps {
 
 export function DataCard({ title, children, className, actions }: DataCardProps) {
   return (
-    <Card className={cn("", className)}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-base font-semibold">{title}</CardTitle>
+    <div
+      className={cn(
+        "rounded-xl border bg-card overflow-hidden",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between gap-4 px-5 py-4 border-b bg-muted/30">
+        <h3 className="text-sm font-semibold">{title}</h3>
         {actions}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
   );
 }
