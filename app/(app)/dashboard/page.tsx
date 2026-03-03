@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/currentUser";
 import { PageHeader, StatCard, DataCard } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
@@ -24,7 +25,11 @@ import {
   FileText,
   FileCheck,
   AlertCircle,
+  ArrowRight,
+  AlertTriangle,
+  Timer,
 } from "lucide-react";
+import Link from "next/link";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -68,34 +73,10 @@ function SaaSAdminOverview() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Tenants"
-          value="24"
-          description="+3 this month"
-          trend="up"
-          icon={Building2}
-        />
-        <StatCard
-          title="Active Users"
-          value="312"
-          description="+28 this week"
-          trend="up"
-          icon={Users}
-        />
-        <StatCard
-          title="Monthly Cost"
-          value="$9,420"
-          description="+12% from last month"
-          trend="up"
-          icon={DollarSign}
-        />
-        <StatCard
-          title="LLM Requests"
-          value="1.2M"
-          description="Last 30 days"
-          trend="neutral"
-          icon={Cpu}
-        />
+        <StatCard title="Total Tenants" value="24" description="+3 this month" trend="up" icon={Building2} />
+        <StatCard title="Active Users" value="312" description="+28 this week" trend="up" icon={Users} />
+        <StatCard title="Monthly Cost" value="$9,420" description="+12% from last month" trend="up" icon={DollarSign} />
+        <StatCard title="LLM Requests" value="1.2M" description="Last 30 days" trend="neutral" icon={Cpu} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -131,10 +112,7 @@ function SaaSAdminOverview() {
                 <div className="flex items-center gap-3 flex-1">
                   <span className="text-sm font-medium w-28">{driver.name}</span>
                   <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full"
-                      style={{ width: `${driver.percentage}%` }}
-                    />
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${driver.percentage}%` }} />
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
@@ -174,70 +152,27 @@ function TenantAdminOverview() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Tenant Overview"
-        subtitle="Your organization's funding pipeline"
-      />
+      <PageHeader title="Tenant Overview" subtitle="Your organization's funding pipeline" />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Funds Available"
-          value="$1.2M"
-          description="Across 8 active funds"
-          trend="neutral"
-          icon={Wallet}
-        />
-        <StatCard
-          title="In Review"
-          value="7"
-          description="3 due this week"
-          trend="neutral"
-          icon={Clock}
-        />
-        <StatCard
-          title="Completed (MTD)"
-          value="23"
-          description="+8 from last month"
-          trend="up"
-          icon={FileCheck}
-        />
-        <StatCard
-          title="Monthly Cost"
-          value="$234"
-          description="LLM processing"
-          trend="neutral"
-          icon={DollarSign}
-        />
+        <StatCard title="Funds Available" value="$1.2M" description="Across 8 active funds" trend="neutral" icon={Wallet} />
+        <StatCard title="In Review" value="7" description="3 due this week" trend="neutral" icon={Clock} />
+        <StatCard title="Completed (MTD)" value="23" description="+8 from last month" trend="up" icon={FileCheck} />
+        <StatCard title="Monthly Cost" value="$234" description="LLM processing" trend="neutral" icon={DollarSign} />
       </div>
 
       <DataCard title="Proposal Pipeline">
         <Tabs defaultValue="new">
           <TabsList>
-            <TabsTrigger value="new">
-              New <Badge variant="secondary" className="ml-1.5">{pipelineData.new.length}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="assigned">
-              Assigned <Badge variant="secondary" className="ml-1.5">{pipelineData.assigned.length}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="review">
-              In Review <Badge variant="secondary" className="ml-1.5">{pipelineData.review.length}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="completed">
-              Completed <Badge variant="secondary" className="ml-1.5">{pipelineData.completed.length}</Badge>
-            </TabsTrigger>
+            <TabsTrigger value="new">New <Badge variant="secondary" className="ml-1.5">{pipelineData.new.length}</Badge></TabsTrigger>
+            <TabsTrigger value="assigned">Assigned <Badge variant="secondary" className="ml-1.5">{pipelineData.assigned.length}</Badge></TabsTrigger>
+            <TabsTrigger value="review">In Review <Badge variant="secondary" className="ml-1.5">{pipelineData.review.length}</Badge></TabsTrigger>
+            <TabsTrigger value="completed">Completed <Badge variant="secondary" className="ml-1.5">{pipelineData.completed.length}</Badge></TabsTrigger>
           </TabsList>
 
           <TabsContent value="new">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Proposal</TableHead>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Submitted</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Proposal</TableHead><TableHead>Applicant</TableHead><TableHead>Amount</TableHead><TableHead>Submitted</TableHead></TableRow></TableHeader>
               <TableBody>
                 {pipelineData.new.map((item) => (
                   <TableRow key={item.id}>
@@ -254,15 +189,7 @@ function TenantAdminOverview() {
 
           <TabsContent value="assigned">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Proposal</TableHead>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>Assessor</TableHead>
-                  <TableHead>Due Date</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Proposal</TableHead><TableHead>Applicant</TableHead><TableHead>Assessor</TableHead><TableHead>Due Date</TableHead></TableRow></TableHeader>
               <TableBody>
                 {pipelineData.assigned.map((item) => (
                   <TableRow key={item.id}>
@@ -270,9 +197,7 @@ function TenantAdminOverview() {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.applicant}</TableCell>
                     <TableCell>{item.assessor}</TableCell>
-                    <TableCell>
-                      <Badge variant="warning">{item.due}</Badge>
-                    </TableCell>
+                    <TableCell><Badge variant="warning">{item.due}</Badge></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -281,15 +206,7 @@ function TenantAdminOverview() {
 
           <TabsContent value="review">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Proposal</TableHead>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>Assessor</TableHead>
-                  <TableHead>Score</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Proposal</TableHead><TableHead>Applicant</TableHead><TableHead>Assessor</TableHead><TableHead>Score</TableHead></TableRow></TableHeader>
               <TableBody>
                 {pipelineData.review.map((item) => (
                   <TableRow key={item.id}>
@@ -297,9 +214,7 @@ function TenantAdminOverview() {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.applicant}</TableCell>
                     <TableCell>{item.assessor}</TableCell>
-                    <TableCell>
-                      <Badge variant="info">{item.score}</Badge>
-                    </TableCell>
+                    <TableCell><Badge variant="info">{item.score}</Badge></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -308,15 +223,7 @@ function TenantAdminOverview() {
 
           <TabsContent value="completed">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Proposal</TableHead>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Completed</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Proposal</TableHead><TableHead>Applicant</TableHead><TableHead>Status</TableHead><TableHead>Completed</TableHead></TableRow></TableHeader>
               <TableBody>
                 {pipelineData.completed.map((item) => (
                   <TableRow key={item.id}>
@@ -342,43 +249,152 @@ function TenantAdminOverview() {
 }
 
 function AssessorOverview() {
+  const queue = [
+    { id: "P-095", name: "Senior Wellness Center", tenant: "Elder Care Co", priority: "High", status: "In Progress", due: "Mar 3, 2026", daysLeft: 1 },
+    { id: "P-098", name: "Green Energy Project", tenant: "Eco Solutions", priority: "High", status: "Not Started", due: "Mar 5, 2026", daysLeft: 3 },
+    { id: "P-096", name: "Food Security Network", tenant: "Hunger Relief", priority: "Medium", status: "In Progress", due: "Mar 4, 2026", daysLeft: 2 },
+    { id: "P-099", name: "Digital Literacy Program", tenant: "Tech For All", priority: "Medium", status: "Not Started", due: "Mar 6, 2026", daysLeft: 4 },
+    { id: "P-100", name: "Arts & Culture Festival", tenant: "Creative Minds", priority: "Low", status: "Not Started", due: "Mar 10, 2026", daysLeft: 8 },
+  ];
+
+  const priorityStyles = {
+    High: "destructive",
+    Medium: "warning",
+    Low: "secondary",
+  } as const;
+
+  const statusStyles = {
+    "In Progress": "info",
+    "Not Started": "outline",
+  } as const;
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Queue"
-        subtitle="Your assigned assessments and progress"
+        title="My Dashboard"
+        subtitle="Your assessment queue and progress"
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Assigned to Me"
-          value="12"
-          description="4 high priority"
-          trend="neutral"
+          title="Assigned"
+          value="5"
+          description="Total in queue"
           icon={Target}
         />
         <StatCard
-          title="Completed Today"
-          value="5"
-          description="Above average"
+          title="Due Soon"
+          value="2"
+          description="Within 48 hours"
+          trend="neutral"
+          icon={AlertTriangle}
+        />
+        <StatCard
+          title="Completed (Week)"
+          value="8"
+          description="+2 from last week"
           trend="up"
           icon={CheckCircle}
         />
         <StatCard
-          title="Pending Review"
-          value="3"
-          description="Due this week"
-          trend="neutral"
-          icon={Clock}
-        />
-        <StatCard
-          title="Avg. Review Time"
-          value="2.4 hrs"
-          description="-15% improvement"
+          title="Avg Turnaround"
+          value="1.8 days"
+          description="-0.4 days improved"
           trend="up"
-          icon={TrendingUp}
+          icon={Timer}
         />
       </div>
+
+      <DataCard 
+        title="My Queue" 
+        actions={
+          <Link href="/dashboard/queue">
+            <Button variant="outline" size="sm">
+              View All
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </Link>
+        }
+      >
+        <Tabs defaultValue="all">
+          <TabsList>
+            <TabsTrigger value="all">All <Badge variant="secondary" className="ml-1.5">5</Badge></TabsTrigger>
+            <TabsTrigger value="high">High Priority <Badge variant="destructive" className="ml-1.5">2</Badge></TabsTrigger>
+            <TabsTrigger value="in-progress">In Progress <Badge variant="info" className="ml-1.5">2</Badge></TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="all">
+            <div className="space-y-2">
+              {queue.map((item) => (
+                <QueueItem key={item.id} item={item} priorityStyles={priorityStyles} statusStyles={statusStyles} />
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="high">
+            <div className="space-y-2">
+              {queue.filter(q => q.priority === "High").map((item) => (
+                <QueueItem key={item.id} item={item} priorityStyles={priorityStyles} statusStyles={statusStyles} />
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="in-progress">
+            <div className="space-y-2">
+              {queue.filter(q => q.status === "In Progress").map((item) => (
+                <QueueItem key={item.id} item={item} priorityStyles={priorityStyles} statusStyles={statusStyles} />
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DataCard>
+    </div>
+  );
+}
+
+interface QueueItemProps {
+  item: {
+    id: string;
+    name: string;
+    tenant: string;
+    priority: string;
+    status: string;
+    due: string;
+    daysLeft: number;
+  };
+  priorityStyles: Record<string, "destructive" | "warning" | "secondary">;
+  statusStyles: Record<string, "info" | "outline">;
+}
+
+function QueueItem({ item, priorityStyles, statusStyles }: QueueItemProps) {
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">{item.id}</span>
+            <span className="font-medium truncate">{item.name}</span>
+          </div>
+          <p className="text-sm text-muted-foreground">{item.tenant}</p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2">
+          <Badge variant={priorityStyles[item.priority as keyof typeof priorityStyles]}>
+            {item.priority}
+          </Badge>
+          <Badge variant={statusStyles[item.status as keyof typeof statusStyles]}>
+            {item.status}
+          </Badge>
+        </div>
+        <div className="hidden md:block text-right">
+          <p className="text-sm font-medium">{item.due}</p>
+          <p className={`text-xs ${item.daysLeft <= 2 ? "text-destructive" : "text-muted-foreground"}`}>
+            {item.daysLeft} day{item.daysLeft !== 1 ? "s" : ""} left
+          </p>
+        </div>
+      </div>
+      <Button variant="outline" size="sm" className="ml-4">
+        Open
+      </Button>
     </div>
   );
 }
