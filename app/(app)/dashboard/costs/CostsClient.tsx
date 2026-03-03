@@ -147,7 +147,7 @@ function SaaSAdminCosts() {
                 <div key={item.category} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
+                      <Icon className={`h-4 w-4 ${item.color.replace('bg-', 'text-')}`} />
                       <span className="text-sm">{item.category}</span>
                     </div>
                     <div className="flex items-center gap-2">

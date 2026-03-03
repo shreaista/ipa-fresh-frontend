@@ -19,3 +19,6 @@ export interface SessionUser {
 export interface SessionSafeResult {
   user: SessionUser | null;
 }
+
+// Re-export RBAC types for convenience (client-safe subset)
+export type { Permission } from "./rbac/types";
