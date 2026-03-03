@@ -47,17 +47,15 @@ Write-Host ""
 # 0) Ensure we're in the repo root where Dockerfile exists
 Set-Location -Path (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-# 1) Check for local changes - fail if none
-if (-not (git status --porcelain)) {
-  Write-Host "No local changes. Nothing to deploy." -ForegroundColor Yellow
-  exit 0
+# 1) Git commit + push (only if there are changes)
+if (git status --porcelain) {
+  Write-Host "Committing and pushing changes..."
+  git add -A
+  git commit -m $Msg
+  git push
+} else {
+  Write-Host "Working tree clean - deploying anyway (build + update image)." -ForegroundColor Cyan
 }
-
-# 2) Git commit + push
-Write-Host "Committing and pushing changes..."
-git add -A
-git commit -m $Msg
-git push
 
 # 3) Build + push image to ACR with unique tag
 $TAG = Get-Date -Format "yyyyMMddHHmmss"
