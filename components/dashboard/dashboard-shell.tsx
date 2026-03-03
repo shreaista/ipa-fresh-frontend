@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { SessionPayload } from "@/lib/auth";
+import type { SessionPayload } from "@/lib/types";
 import { NavItem, getPageTitle } from "@/lib/nav";
 import { Topbar } from "./topbar";
 import { Sidebar, MobileSidebar } from "./sidebar";

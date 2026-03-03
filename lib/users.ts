@@ -1,4 +1,4 @@
-import { Role } from "./auth";
+import type { Role } from "./types";
 
 export interface MockUser {
   id: string;

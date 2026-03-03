@@ -12,7 +12,7 @@ import {
   ChevronRight,
   User,
 } from "lucide-react";
-import { SessionPayload } from "@/lib/auth";
+import type { SessionPayload } from "@/lib/types";
 
 interface TopbarProps {
   user: SessionPayload;

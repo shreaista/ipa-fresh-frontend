@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/currentUser";
+import { getSessionSafe } from "@/lib/session";
 import { getNavItems } from "@/lib/nav";
 import { DashboardShell } from "@/components/dashboard";
 
@@ -8,7 +8,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  const { user } = await getSessionSafe();
 
   if (!user) {
     redirect("/login");

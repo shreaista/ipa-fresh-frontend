@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { verifySession, SessionPayload } from "./auth";
+import { verifySession } from "./auth";
+import type { SessionPayload } from "./types";
 
 export async function getCurrentUser(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();

@@ -10,7 +10,7 @@ import {
   ClipboardList,
   type LucideIcon,
 } from "lucide-react";
-import { Role } from "./auth";
+import type { Role } from "./types";
 
 export interface NavItem {
   href: string;

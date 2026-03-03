@@ -1,20 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import type { Role, SessionPayload } from "./types";
 
-export type Role = "saas_admin" | "tenant_admin" | "assessor";
-
-export interface SessionPayload {
-  userId: string;
-  email: string;
-  role: Role;
-  name: string;
-  tenantId?: string;
-}
-
-interface JWTPayload extends SessionPayload {
-  iat: number;
-  exp: number;
-}
+export type { Role, SessionPayload };
 
 const SESSION_COOKIE_NAME = "ipa_session";
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7; // 7 days
