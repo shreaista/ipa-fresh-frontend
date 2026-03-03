@@ -3,9 +3,34 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NavItem } from "@/lib/nav";
-import { Briefcase, ChevronLeft } from "lucide-react";
+import type { NavItem, IconName } from "@/lib/nav";
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  CreditCard,
+  DollarSign,
+  BarChart3,
+  Wallet,
+  FileText,
+  ClipboardList,
+  Briefcase,
+  ChevronLeft,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+const iconMap: Record<IconName, LucideIcon> = {
+  "layout-dashboard": LayoutDashboard,
+  "building-2": Building2,
+  "users": Users,
+  "credit-card": CreditCard,
+  "dollar-sign": DollarSign,
+  "bar-chart-3": BarChart3,
+  "wallet": Wallet,
+  "file-text": FileText,
+  "clipboard-list": ClipboardList,
+};
 
 interface SidebarProps {
   items: NavItem[];
@@ -26,7 +51,7 @@ export function Sidebar({ items, collapsed, onToggle }: SidebarProps) {
       <div className="flex-1 py-4">
         <nav className="flex flex-col gap-1 px-2">
           {items.map((item) => {
-            const Icon = item.icon;
+            const Icon = iconMap[item.icon];
             const isActive = pathname === item.href;
 
             return (
@@ -100,7 +125,7 @@ export function MobileSidebar({ items, open, onClose }: MobileSidebarProps) {
 
         <nav className="flex flex-col gap-1 p-4">
           {items.map((item) => {
-            const Icon = item.icon;
+            const Icon = iconMap[item.icon];
             const isActive = pathname === item.href;
 
             return (
