@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession } from "@/lib/auth";
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const token = request.cookies.get("ipa_session")?.value;
-  const session = token ? await verifySession(token) : null;
+  const hasSession = request.cookies.has("ipa_session");
 
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isLoginRoute = pathname === "/login";
 
-  if (!session && isDashboardRoute) {
+  if (!hasSession && isDashboardRoute) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (session && isLoginRoute) {
+  if (hasSession && isLoginRoute) {
     const dashboardUrl = new URL("/dashboard", request.url);
     return NextResponse.redirect(dashboardUrl);
   }
