@@ -132,6 +132,9 @@ export default function LoginPage() {
                 <h2 className="text-2xl font-semibold tracking-tight">
                   Welcome back
                 </h2>
+                <p className="text-xs text-gray-400">
+                  DEPLOY CHECK: 2026-03-03 08:45:00
+                </p>
                 <p className="text-sm text-muted-foreground">
                   Enter your credentials to access your account
                 </p>
