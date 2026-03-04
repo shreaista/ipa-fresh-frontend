@@ -15,11 +15,11 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const { role, permissions } = authz.data;
+  const { role, permissions, activeTenantId } = authz.data;
 
   const { user } = await getSessionSafe();
 
-  const navItems = getNavItemsForRole(role);
+  const navItems = getNavItemsForRole(role, activeTenantId);
   const filteredNavItems = filterNavByPermissions(navItems, permissions);
 
   const userInfo = {
@@ -29,7 +29,12 @@ export default async function DashboardLayout({
   };
 
   return (
-    <AppShell user={userInfo} navItems={filteredNavItems} permissions={permissions}>
+    <AppShell
+      user={userInfo}
+      navItems={filteredNavItems}
+      permissions={permissions}
+      activeTenantId={activeTenantId}
+    >
       {children}
     </AppShell>
   );

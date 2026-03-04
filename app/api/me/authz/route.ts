@@ -10,6 +10,7 @@ export async function GET() {
       data: {
         role: ctx.role,
         tenantId: ctx.tenantId,
+        activeTenantId: ctx.tenantId,
         permissions: ctx.permissions,
         entitlements: ctx.entitlements,
       },

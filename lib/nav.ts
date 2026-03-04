@@ -25,15 +25,30 @@ export interface NavItem {
 // Navigation by Role
 // ─────────────────────────────────────────────────────────────────────────────
 
+// SaaS Admin in global mode (no tenant selected)
+const SAAS_ADMIN_GLOBAL: NavItem[] = [
+  { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+  { label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permission: "tenant:manage" },
+  { label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card" },
+  { label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permission: "tenant:costs:read" },
+  { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+];
+
+// SaaS Admin viewing as a tenant
+const SAAS_ADMIN_TENANT: NavItem[] = [
+  { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+  { label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permission: "tenant:manage" },
+  { label: "Funds", href: "/dashboard/funds", iconKey: "wallet" },
+  { label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
+  { label: "Users", href: "/dashboard/users", iconKey: "users", permission: "user:read" },
+  { label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card" },
+  { label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permission: "tenant:costs:read" },
+  { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+];
+
 export const NAV_BY_ROLE: Record<string, NavItem[]> = {
-  saas_admin: [
-    { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
-    { label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permission: "tenant:manage" },
-    { label: "Users", href: "/dashboard/users", iconKey: "users", permission: "user:read" },
-    { label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card" },
-    { label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permission: "tenant:costs:read" },
-    { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
-  ],
+  saas_admin: SAAS_ADMIN_GLOBAL,
+  saas_admin_tenant: SAAS_ADMIN_TENANT,
   tenant_admin: [
     { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
     { label: "Funds", href: "/dashboard/funds", iconKey: "wallet" },
@@ -54,7 +69,10 @@ export const NAV_BY_ROLE: Record<string, NavItem[]> = {
 // Helper Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getNavItemsForRole(role: string): NavItem[] {
+export function getNavItemsForRole(role: string, activeTenantId?: string | null): NavItem[] {
+  if (role === "saas_admin") {
+    return activeTenantId ? NAV_BY_ROLE.saas_admin_tenant : NAV_BY_ROLE.saas_admin;
+  }
   return NAV_BY_ROLE[role] ?? NAV_BY_ROLE.assessor;
 }
 

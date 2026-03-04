@@ -11,10 +11,11 @@ interface AppShellProps {
   user: UserInfo;
   navItems: NavItem[];
   permissions: string[];
+  activeTenantId: string | null;
   children: React.ReactNode;
 }
 
-export function AppShell({ user, navItems, permissions, children }: AppShellProps) {
+export function AppShell({ user, navItems, permissions, activeTenantId, children }: AppShellProps) {
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -26,6 +27,7 @@ export function AppShell({ user, navItems, permissions, children }: AppShellProp
       <Topbar
         user={user}
         pageTitle={pageTitle}
+        activeTenantId={activeTenantId}
         onMenuClick={() => setMobileMenuOpen(true)}
       />
 

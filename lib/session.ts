@@ -27,13 +27,24 @@ export async function getSessionSafe(): Promise<SessionSafeResult> {
       return { user: null };
     }
 
+    const role = payload.role || "assessor";
+
+    // For saas_admin, check if there's an override tenant cookie
+    let activeTenantId: string | undefined = payload.tenantId;
+    if (role === "saas_admin") {
+      const tenantOverride = cookieStore.get("ipa_tenant")?.value;
+      if (tenantOverride) {
+        activeTenantId = tenantOverride;
+      }
+    }
+
     return {
       user: {
         userId: payload.userId || payload.sub || "",
         email: payload.email || "",
-        role: payload.role || "assessor",
+        role,
         name: payload.name || "",
-        tenantId: payload.tenantId,
+        tenantId: activeTenantId,
       },
     };
   } catch {

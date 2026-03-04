@@ -15,6 +15,7 @@ import { getDemoEntitlements } from "@/lib/entitlements/demoEntitlements";
 export interface MyAuthzData {
   role: RoleKey;
   tenantId: string | null;
+  activeTenantId: string | null;
   permissions: string[];
   entitlements: Entitlements | null;
 }
@@ -44,6 +45,7 @@ export async function getMyAuthz(): Promise<MyAuthzResult> {
     data: {
       role,
       tenantId,
+      activeTenantId: tenantId,
       permissions: [...permissions],
       entitlements,
     },

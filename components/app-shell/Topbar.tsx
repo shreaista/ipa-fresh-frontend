@@ -14,6 +14,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TenantSwitcher } from "./TenantSwitcher";
 
 export interface UserInfo {
   name: string;
@@ -24,6 +25,7 @@ export interface UserInfo {
 interface TopbarProps {
   user: UserInfo;
   pageTitle: string;
+  activeTenantId: string | null;
   onMenuClick: () => void;
 }
 
@@ -34,7 +36,7 @@ function formatRole(role: string): string {
     .join(" ");
 }
 
-export function Topbar({ user, pageTitle, onMenuClick }: TopbarProps) {
+export function Topbar({ user, pageTitle, activeTenantId, onMenuClick }: TopbarProps) {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -42,6 +44,8 @@ export function Topbar({ user, pageTitle, onMenuClick }: TopbarProps) {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
+
+  const isSaasAdmin = user.role === "saas_admin";
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 lg:px-6">
@@ -65,6 +69,10 @@ export function Topbar({ user, pageTitle, onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex-1" />
+
+      {isSaasAdmin && (
+        <TenantSwitcher activeTenantId={activeTenantId} />
+      )}
 
       <div className="hidden md:flex items-center">
         <button className="flex items-center gap-2 h-9 px-3 rounded-lg border bg-muted/40 text-muted-foreground text-sm hover:bg-muted transition-colors min-w-[200px]">
