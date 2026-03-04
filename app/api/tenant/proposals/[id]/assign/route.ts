@@ -8,15 +8,21 @@ import {
 } from "@/lib/authz";
 import { assignProposal, getProposalById } from "@/lib/mock/proposals";
 import { getQueueById } from "@/lib/mock/queues";
+import {
+  isUserInTenant,
+  isQueueInTenant,
+  getUserById,
+  setAssignment,
+} from "@/lib/mock/proposalsStore";
+import { logAudit } from "@/lib/audit";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 interface AssignRequestBody {
-  assignToUserId?: string;
-  assignToUserName?: string;
-  assignToQueueId?: string;
+  assignedUserId?: string;
+  queueId?: string;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -35,43 +41,79 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(403, "Proposal not in your tenant");
     }
 
-    const body: AssignRequestBody = await request.json();
-    const { assignToUserId, assignToUserName, assignToQueueId } = body;
+    let body: AssignRequestBody;
+    try {
+      body = await request.json();
+    } catch {
+      throw new AuthzHttpError(400, "Invalid JSON body");
+    }
 
-    if (assignToUserId && assignToQueueId) {
+    const { assignedUserId, queueId } = body;
+
+    if (assignedUserId && queueId) {
       throw new AuthzHttpError(400, "Cannot assign to both user and queue");
     }
 
-    if (!assignToUserId && !assignToQueueId) {
+    if (!assignedUserId && !queueId) {
       throw new AuthzHttpError(400, "Must assign to user or queue");
     }
 
-    if (assignToQueueId) {
-      const queue = getQueueById(assignToQueueId);
-      if (!queue || queue.tenantId !== tenantId) {
+    let assigneeName: string | undefined;
+
+    // Validate assignee belongs to same tenant
+    if (assignedUserId) {
+      if (!isUserInTenant(assignedUserId, tenantId)) {
+        throw new AuthzHttpError(400, "Assignee does not belong to this tenant");
+      }
+      const assignee = getUserById(assignedUserId);
+      assigneeName = assignee?.name;
+    }
+
+    // Validate queue belongs to same tenant
+    if (queueId) {
+      if (!isQueueInTenant(queueId, tenantId)) {
         throw new AuthzHttpError(400, "Queue not found in tenant");
+      }
+      const queue = getQueueById(queueId);
+      if (!queue) {
+        throw new AuthzHttpError(400, "Queue not found");
       }
     }
 
+    // Update proposal assignment
     const result = assignProposal({
       tenantId,
       proposalId,
-      assignToUserId,
-      assignToUserName,
-      assignToQueueId,
+      assignToUserId: assignedUserId,
+      assignToUserName: assigneeName,
+      assignToQueueId: queueId,
     });
 
     if (!result.ok) {
       throw new AuthzHttpError(400, result.error || "Assignment failed");
     }
 
-    console.log("[audit] proposal.assign", {
+    // Update the store assignment tracking
+    setAssignment(
       proposalId,
+      assignedUserId || null,
+      queueId || null,
+      user.userId || ""
+    );
+
+    // Audit log
+    logAudit({
+      action: "proposal.assign",
+      actorUserId: user.userId || "",
+      actorEmail: user.email,
       tenantId,
-      userId: user.userId,
-      assignedToUserId: result.assignedToUserId,
-      assignedQueueId: result.assignedQueueId,
-      timestamp: new Date().toISOString(),
+      resourceType: "proposal",
+      resourceId: proposalId,
+      details: {
+        assignedToUserId: result.assignedToUserId,
+        assignedQueueId: result.assignedQueueId,
+        assigneeName,
+      },
     });
 
     return NextResponse.json({

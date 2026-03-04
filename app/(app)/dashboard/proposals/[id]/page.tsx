@@ -1,5 +1,6 @@
 import { requirePermissionWithTenantContext, PROPOSAL_READ } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
+import { getProposalQueueId, getQueueById } from "@/lib/mock/queues";
 import ProposalDetailClient from "./ProposalDetailClient";
 
 interface PageProps {
@@ -18,12 +19,31 @@ export default async function ProposalDetailPage({ params }: PageProps) {
   });
 
   if (result.accessDenied) {
-    return <ProposalDetailClient proposal={null} error="Not authorized to view this proposal" />;
+    return <ProposalDetailClient proposal={null} canAssign={false} error="Not authorized to view this proposal" />;
   }
 
   if (!result.proposal) {
-    return <ProposalDetailClient proposal={null} error="Proposal not found" />;
+    return <ProposalDetailClient proposal={null} canAssign={false} error="Proposal not found" />;
   }
 
-  return <ProposalDetailClient proposal={result.proposal} />;
+  // Check if user can assign (tenant_admin or saas_admin)
+  const canAssign = user.role === "tenant_admin" || user.role === "saas_admin";
+
+  // Get current queue assignment if any
+  const queueId = getProposalQueueId(result.proposal.id);
+  const queue = queueId ? getQueueById(queueId) : null;
+  const currentAssignment = {
+    assignedToUserId: result.proposal.assignedToUserId,
+    assignedToName: result.proposal.assignedToName,
+    assignedQueueId: queueId,
+    assignedQueueName: queue?.name || null,
+  };
+
+  return (
+    <ProposalDetailClient
+      proposal={result.proposal}
+      canAssign={canAssign}
+      currentAssignment={currentAssignment}
+    />
+  );
 }

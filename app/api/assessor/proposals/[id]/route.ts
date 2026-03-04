@@ -4,18 +4,11 @@ import {
   requireUserRole,
   requireTenant,
   jsonError,
-  canAccessProposal,
   AuthzHttpError,
-  type Proposal,
 } from "@/lib/authz";
+import { getProposalForUser } from "@/lib/mock/proposals";
+import { canUserAccessProposal } from "@/lib/mock/proposalsStore";
 import { logAssessorAction } from "@/lib/rbac/audit";
-
-const demoProposals: (Proposal & { name: string; applicant: string; fund: string; amount: number; status: string; due: string; priority: string })[] = [
-  { id: "P-095", name: "Senior Wellness Center", applicant: "Elder Care Co", fund: "Healthcare Init", amount: 120000, status: "In Progress", assignedAssessorId: "demo-assessor", queueAssessorIds: ["demo-assessor"], tenantId: "demo-tenant", due: "Mar 3, 2026", priority: "High" },
-  { id: "P-098", name: "Green Energy Project", applicant: "Eco Solutions", fund: "Innovation Grant", amount: 78000, status: "Not Started", assignedAssessorId: "demo-assessor", queueAssessorIds: ["demo-assessor"], tenantId: "demo-tenant", due: "Mar 5, 2026", priority: "High" },
-  { id: "P-096", name: "Food Security Network", applicant: "Hunger Relief", fund: "Emergency Reserve", amount: 55000, status: "In Progress", assignedAssessorId: "demo-assessor", queueAssessorIds: ["demo-assessor"], tenantId: "demo-tenant", due: "Mar 4, 2026", priority: "Medium" },
-  { id: "P-099", name: "Digital Literacy Program", applicant: "Tech For All", fund: "Community Dev", amount: 25000, status: "Not Started", assignedAssessorId: "demo-assessor", queueAssessorIds: ["demo-assessor"], tenantId: "demo-tenant", due: "Mar 6, 2026", priority: "Medium" },
-];
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -28,21 +21,33 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const tenantId = requireTenant(user);
     const { id } = await context.params;
 
-    const proposal = demoProposals.find((p) => p.id === id);
+    // Get proposal using the unified access check
+    const result = getProposalForUser({
+      tenantId,
+      userId: user.userId || "",
+      role: user.role,
+      proposalId: id,
+    });
 
-    if (!proposal) {
+    if (!result.proposal) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
-    const ctx = {
-      user: { id: user.userId, email: user.email, name: user.name, role: user.role },
+    if (result.accessDenied) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
+
+    // Additional access check using the store
+    const hasAccess = canUserAccessProposal({
+      userId: user.userId || "",
       tenantId,
       role: user.role,
-      permissions: [] as const,
-      entitlements: null,
-    };
+      proposalId: id,
+      proposalTenantId: result.proposal.tenantId,
+      proposalAssignedUserId: result.proposal.assignedToUserId,
+    });
 
-    if (!canAccessProposal(ctx, proposal)) {
+    if (!hasAccess) {
       throw new AuthzHttpError(403, "Access denied to this proposal");
     }
 
@@ -57,13 +62,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       },
       "proposal.view",
       "proposal",
-      proposal.id,
-      { proposalName: proposal.name }
+      result.proposal.id,
+      { proposalName: result.proposal.name }
     );
 
     return NextResponse.json({
       ok: true,
-      data: { proposal },
+      data: { proposal: result.proposal },
     });
   } catch (error) {
     return jsonError(error);

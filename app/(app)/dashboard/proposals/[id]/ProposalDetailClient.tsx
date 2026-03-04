@@ -19,6 +19,7 @@ import {
   AlertCircle,
   FileText,
   User,
+  Users,
   DollarSign,
   Calendar,
   Building,
@@ -32,20 +33,17 @@ import {
   Trash2,
   Loader2,
   RefreshCw,
-  // NEW: Icons for mandate card
   Globe,
   Target,
   Briefcase,
   FileStack,
   Hash,
-  // NEW: Icons for evaluation card
   Play,
   TrendingUp,
   AlertTriangle,
   Lightbulb,
   Award,
   History,
-  // NEW: Icon for confidence indicator
   ShieldCheck,
   Info,
 } from "lucide-react";
@@ -165,19 +163,111 @@ function formatAmount(amount: number): string {
   }).format(amount);
 }
 
+interface CurrentAssignment {
+  assignedToUserId: string | null;
+  assignedToName: string | null;
+  assignedQueueId: string | null;
+  assignedQueueName: string | null;
+}
+
+interface Assessor {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface Queue {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 interface ProposalDetailClientProps {
   proposal: Proposal | null;
+  canAssign: boolean;
+  currentAssignment?: CurrentAssignment;
   error?: string;
 }
 
-export default function ProposalDetailClient({ proposal, error }: ProposalDetailClientProps) {
-  // NEW: Document management state
+export default function ProposalDetailClient({ proposal, canAssign, currentAssignment, error }: ProposalDetailClientProps) {
+  // Document management state
   const [documents, setDocuments] = useState<ProposalDocumentBlob[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Assignment state
+  const [assessors, setAssessors] = useState<Assessor[]>([]);
+  const [queues, setQueues] = useState<Queue[]>([]);
+  const [selectedAssessor, setSelectedAssessor] = useState<string>("");
+  const [selectedQueue, setSelectedQueue] = useState<string>("");
+  const [assignmentMode, setAssignmentMode] = useState<"user" | "queue">("user");
+  const [assigning, setAssigning] = useState(false);
+  const [assignMessage, setAssignMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [assignment, setAssignment] = useState<CurrentAssignment | undefined>(currentAssignment);
+
+  // Load assessors and queues for assignment
+  useEffect(() => {
+    if (canAssign && proposal) {
+      Promise.all([
+        fetch("/api/tenant/assessors").then((r) => r.json()),
+        fetch("/api/tenant/queues").then((r) => r.json()),
+      ]).then(([assessorRes, queueRes]) => {
+        if (assessorRes.ok) setAssessors(assessorRes.data.assessors || []);
+        if (queueRes.ok) setQueues(queueRes.data.queues || []);
+      });
+    }
+  }, [canAssign, proposal]);
+
+  // Handle assignment
+  const handleAssign = async () => {
+    if (!proposal) return;
+    setAssigning(true);
+    setAssignMessage(null);
+
+    try {
+      const body: { assignedUserId?: string; queueId?: string } = {};
+      if (assignmentMode === "user" && selectedAssessor) {
+        body.assignedUserId = selectedAssessor;
+      } else if (assignmentMode === "queue" && selectedQueue) {
+        body.queueId = selectedQueue;
+      } else {
+        setAssignMessage({ text: "Please select an assessor or queue", type: "error" });
+        setAssigning(false);
+        return;
+      }
+
+      const res = await fetch(`/api/tenant/proposals/${proposal.id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (data.ok) {
+        const assignee = assessors.find((a) => a.id === data.data.assignedToUserId);
+        const queue = queues.find((q) => q.id === data.data.assignedQueueId);
+        setAssignment({
+          assignedToUserId: data.data.assignedToUserId,
+          assignedToName: assignee?.name || null,
+          assignedQueueId: data.data.assignedQueueId,
+          assignedQueueName: queue?.name || null,
+        });
+        setAssignMessage({ text: "Assignment updated successfully", type: "success" });
+        setSelectedAssessor("");
+        setSelectedQueue("");
+      } else {
+        setAssignMessage({ text: data.error || "Assignment failed", type: "error" });
+      }
+    } catch {
+      setAssignMessage({ text: "Network error during assignment", type: "error" });
+    }
+
+    setAssigning(false);
+  };
 
   // NEW: Mandate state
   const [mandate, setMandate] = useState<MandateData | null>(null);
@@ -572,7 +662,115 @@ export default function ProposalDetailClient({ proposal, error }: ProposalDetail
         </Card>
       </div>
 
-      {/* NEW: Fund Mandate Used Card */}
+      {/* Assignments Panel - Tenant Admin Only */}
+      {canAssign && (
+        <DataCard
+          title="Proposal Assignment"
+          description="Assign this proposal to an assessor or queue"
+        >
+          {/* Current Assignment */}
+          {assignment && (assignment.assignedToUserId || assignment.assignedQueueId) && (
+            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium mb-1">Current Assignment</p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {assignment.assignedToUserId ? (
+                  <>
+                    <User className="h-4 w-4" />
+                    <span>Assigned to: <span className="font-medium text-foreground">{assignment.assignedToName || assignment.assignedToUserId}</span></span>
+                  </>
+                ) : assignment.assignedQueueId ? (
+                  <>
+                    <Users className="h-4 w-4" />
+                    <span>In queue: <span className="font-medium text-foreground">{assignment.assignedQueueName || assignment.assignedQueueId}</span></span>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {/* Assignment Message */}
+          {assignMessage && (
+            <div className={`mb-4 px-3 py-2 text-sm rounded-lg ${
+              assignMessage.type === "success"
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-red-50 text-red-700"
+            }`}>
+              {assignMessage.text}
+            </div>
+          )}
+
+          {/* Assignment Mode Tabs */}
+          <div className="flex items-center gap-2 mb-4">
+            <Button
+              variant={assignmentMode === "user" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAssignmentMode("user")}
+            >
+              <User className="h-4 w-4 mr-1" />
+              Assign to Assessor
+            </Button>
+            <Button
+              variant={assignmentMode === "queue" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAssignmentMode("queue")}
+            >
+              <Users className="h-4 w-4 mr-1" />
+              Assign to Queue
+            </Button>
+          </div>
+
+          {/* Assignment Form */}
+          <div className="flex items-end gap-3">
+            {assignmentMode === "user" ? (
+              <div className="flex-1">
+                <label className="text-sm font-medium mb-1.5 block">Select Assessor</label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={selectedAssessor}
+                  onChange={(e) => setSelectedAssessor(e.target.value)}
+                >
+                  <option value="">Choose an assessor...</option>
+                  {assessors.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex-1">
+                <label className="text-sm font-medium mb-1.5 block">Select Queue</label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={selectedQueue}
+                  onChange={(e) => setSelectedQueue(e.target.value)}
+                >
+                  <option value="">Choose a queue...</option>
+                  {queues.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <Button
+              onClick={handleAssign}
+              disabled={assigning || (assignmentMode === "user" ? !selectedAssessor : !selectedQueue)}
+            >
+              {assigning ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4 mr-1" />
+              )}
+              Assign
+            </Button>
+          </div>
+        </DataCard>
+      )}
+
+      {/* Fund Mandate Used Card */}
       <DataCard
         title="Fund Mandate Used"
         description={mandate ? `Mandate template for ${proposal.fund}` : undefined}
