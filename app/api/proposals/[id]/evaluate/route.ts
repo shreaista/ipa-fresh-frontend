@@ -1,5 +1,5 @@
 // NEW: API route to run Proposal Evaluation with LLM
-// POST /api/proposals/[proposalId]/evaluate
+// POST /api/proposals/[id]/evaluate
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -17,7 +17,7 @@ import { checkRateLimit } from "@/lib/evaluation/rateLimiter";
 import { logAudit } from "@/lib/audit";
 
 interface RouteContext {
-  params: Promise<{ proposalId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Check rate limit before processing
     const rateLimitResult = checkRateLimit(tenantId);
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       tenantId,
       userId: session.userId || "",
       role: session.role,
-      proposalId,
+      proposalId: id,
     });
 
     if (proposalResult.accessDenied) {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // NEW: Run evaluation with LLM
     const result = await runEvaluation({
       tenantId,
-      proposalId,
+      proposalId: id,
       fundName: proposal.fund,
       mandateKey,
       evaluatedByUserId: session.userId || "",
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       actorEmail: session.email,
       tenantId,
       resourceType: "proposal_evaluation",
-      resourceId: proposalId,
+      resourceId: id,
       details: {
         evaluationId: result.report.evaluationId,
         blobPath: result.blobPath,

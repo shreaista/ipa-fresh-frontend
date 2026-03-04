@@ -1,5 +1,5 @@
 // NEW: API route to get Fund Mandate for a Proposal
-// GET /api/proposals/[proposalId]/mandate
+// GET /api/proposals/[id]/mandate
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -16,7 +16,7 @@ import { getFundMandateById } from "@/lib/mock/fundMandates";
 import { listFundMandates } from "@/lib/storage/azure";
 
 interface RouteContext {
-  params: Promise<{ proposalId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 // NEW: Format ticket amount as currency
@@ -35,14 +35,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access (same rules as proposal documents)
     const proposalResult = getProposalForUser({
       tenantId,
       userId: session.userId || "",
       role: session.role,
-      proposalId,
+      proposalId: id,
     });
 
     if (proposalResult.accessDenied) {

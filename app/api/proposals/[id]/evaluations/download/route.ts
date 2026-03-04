@@ -1,5 +1,5 @@
 // NEW: API route to download Proposal Evaluation
-// GET /api/proposals/[proposalId]/evaluations/download?blobPath=...
+// GET /api/proposals/[id]/evaluations/download?blobPath=...
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -17,7 +17,7 @@ import {
 } from "@/lib/evaluation/proposalEvaluator";
 
 interface RouteContext {
-  params: Promise<{ proposalId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -25,14 +25,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
       userId: session.userId || "",
       role: session.role,
-      proposalId,
+      proposalId: id,
     });
 
     if (proposalResult.accessDenied) {
@@ -51,11 +51,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // NEW: Validate blob path belongs to this tenant/proposal
-    if (!validateEvaluationBlobPath(blobPath, tenantId, proposalId)) {
+    if (!validateEvaluationBlobPath(blobPath, tenantId, id)) {
       throw new AuthzHttpError(403, "Invalid blob path for this proposal");
     }
 
-    const report = await downloadEvaluation(tenantId, proposalId, blobPath);
+    const report = await downloadEvaluation(tenantId, id, blobPath);
 
     if (!report) {
       throw new AuthzHttpError(404, "Evaluation not found");

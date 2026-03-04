@@ -1,5 +1,5 @@
 // NEW: API route to list Proposal Evaluations
-// GET /api/proposals/[proposalId]/evaluations
+// GET /api/proposals/[id]/evaluations
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -18,7 +18,7 @@ import {
 } from "@/lib/evaluation/proposalEvaluator";
 
 interface RouteContext {
-  params: Promise<{ proposalId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -26,14 +26,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
       userId: session.userId || "",
       role: session.role,
-      proposalId,
+      proposalId: id,
     });
 
     if (proposalResult.accessDenied) {
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // NEW: List all evaluations for this proposal
-    const evaluations = await listEvaluations(tenantId, proposalId);
+    const evaluations = await listEvaluations(tenantId, id);
 
     // NEW: Optionally include the latest evaluation report
     const includeLatest = request.nextUrl.searchParams.get("includeLatest") === "true";
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (includeLatest && evaluations.length > 0) {
       latestReport = await downloadEvaluation(
         tenantId,
-        proposalId,
+        id,
         evaluations[0].blobPath
       );
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       if (i === 0 && latestReport) {
         evaluationsWithScores.push({ ...eval_, fitScore: latestReport.fitScore });
       } else {
-        const report = await downloadEvaluation(tenantId, proposalId, eval_.blobPath);
+        const report = await downloadEvaluation(tenantId, id, eval_.blobPath);
         evaluationsWithScores.push({
           ...eval_,
           fitScore: report?.fitScore || 0,

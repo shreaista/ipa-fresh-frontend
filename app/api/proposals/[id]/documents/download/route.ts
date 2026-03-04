@@ -16,7 +16,7 @@ import {
 } from "@/lib/storage/proposalDocuments";
 
 interface RouteContext {
-  params: Promise<{ proposalId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -24,14 +24,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
       userId: session.userId || "",
       role: session.role,
-      proposalId,
+      proposalId: id,
     });
 
     if (proposalResult.accessDenied) {
@@ -50,11 +50,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // NEW: Validate blob path belongs to this tenant/proposal
-    if (!validateBlobPath(blobPath, tenantId, proposalId)) {
+    if (!validateBlobPath(blobPath, tenantId, id)) {
       throw new AuthzHttpError(403, "Invalid blob path for this proposal");
     }
 
-    const result = await downloadProposalDocument(tenantId, proposalId, blobPath);
+    const result = await downloadProposalDocument(tenantId, id, blobPath);
 
     if (!result) {
       throw new AuthzHttpError(404, "Document not found");

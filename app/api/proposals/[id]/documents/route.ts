@@ -24,7 +24,7 @@ import {
 import { logAudit } from "@/lib/audit";
 
 interface RouteContext {
-  params: Promise<{ proposalId: string }>;
+  params: Promise<{ id: string }>;
 }
 
 // NEW: Helper to validate proposal access
@@ -61,10 +61,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_UPLOAD);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access
-    await validateProposalAccess(tenantId, session.userId || "", session.role, proposalId);
+    await validateProposalAccess(tenantId, session.userId || "", session.role, id);
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const result = await uploadProposalDocument({
       tenantId,
-      proposalId,
+      proposalId: id,
       filename: file.name,
       contentType: file.type,
       buffer,
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       actorEmail: session.email,
       tenantId,
       resourceType: "proposal_document",
-      resourceId: proposalId,
+      resourceId: id,
       details: {
         blobPath: result.blobPath,
         filename: result.filename,
@@ -139,12 +139,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access
-    await validateProposalAccess(tenantId, session.userId || "", session.role, proposalId);
+    await validateProposalAccess(tenantId, session.userId || "", session.role, id);
 
-    const result = await listProposalDocuments(tenantId, proposalId);
+    const result = await listProposalDocuments(tenantId, id);
 
     return NextResponse.json({
       ok: true,
@@ -168,10 +168,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const session = await requireSession();
     requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_DELETE);
     const tenantId = requireTenant(session);
-    const { proposalId } = await context.params;
+    const { id } = await context.params;
 
     // NEW: Validate proposal access
-    await validateProposalAccess(tenantId, session.userId || "", session.role, proposalId);
+    await validateProposalAccess(tenantId, session.userId || "", session.role, id);
 
     const { searchParams } = new URL(request.url);
     const blobPath = searchParams.get("blobPath");
@@ -181,11 +181,11 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     // NEW: Validate blob path belongs to this tenant/proposal
-    if (!validateBlobPath(blobPath, tenantId, proposalId)) {
+    if (!validateBlobPath(blobPath, tenantId, id)) {
       throw new AuthzHttpError(403, "Invalid blob path for this proposal");
     }
 
-    const deleted = await deleteProposalDocument(tenantId, proposalId, blobPath);
+    const deleted = await deleteProposalDocument(tenantId, id, blobPath);
 
     if (!deleted) {
       throw new AuthzHttpError(404, "Document not found or already deleted");
@@ -198,7 +198,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       actorEmail: session.email,
       tenantId,
       resourceType: "proposal_document",
-      resourceId: proposalId,
+      resourceId: id,
       details: {
         blobPath,
       },
