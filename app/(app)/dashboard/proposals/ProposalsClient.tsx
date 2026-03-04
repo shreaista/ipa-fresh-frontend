@@ -72,9 +72,11 @@ function formatAmount(amount: number): string {
 interface ProposalsClientProps {
   proposals: Proposal[];
   error?: string;
+  role?: string;
+  proposalCount?: number;
 }
 
-export default function ProposalsClient({ proposals, error }: ProposalsClientProps) {
+export default function ProposalsClient({ proposals, error, role, proposalCount }: ProposalsClientProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
@@ -109,8 +111,18 @@ export default function ProposalsClient({ proposals, error }: ProposalsClientPro
     );
   }
 
+  const roleLabel = role === "saas_admin" ? "SaaS Admin" :
+                    role === "tenant_admin" ? "Tenant Admin" :
+                    role === "assessor" ? "Assessor" : role;
+
   return (
     <div className="space-y-6">
+      {role && proposalCount !== undefined && (
+        <div className="text-sm text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+          Showing <span className="font-medium text-foreground">{proposalCount}</span> proposal{proposalCount !== 1 ? "s" : ""} as <span className="font-medium text-foreground">{roleLabel}</span>
+        </div>
+      )}
+
       <PageHeader
         title="Proposals"
         subtitle="View and manage all funding proposals"
