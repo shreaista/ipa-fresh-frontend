@@ -16,6 +16,7 @@ const DEMO_ENTITLEMENTS: Record<string, Entitlements> = {
     allowedLLMProviders: ["openai", "anthropic"],
     modelAllowlist: ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet"],
     rateLimitRpm: 60,
+    fundMandatesEnabled: true,
   },
   "tenant-002": {
     maxAssessors: 100,
@@ -25,6 +26,7 @@ const DEMO_ENTITLEMENTS: Record<string, Entitlements> = {
     allowedLLMProviders: ["openai", "anthropic", "azure_openai", "google"],
     modelAllowlist: ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet", "gemini-1.5-pro"],
     rateLimitRpm: 300,
+    fundMandatesEnabled: false,
   },
   "demo-tenant": {
     maxAssessors: 10,
@@ -34,8 +36,15 @@ const DEMO_ENTITLEMENTS: Record<string, Entitlements> = {
     allowedLLMProviders: ["openai"],
     modelAllowlist: ["gpt-4o", "gpt-4o-mini"],
     rateLimitRpm: 30,
+    fundMandatesEnabled: false,
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mutable Entitlements Store (for runtime updates)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const entitlementsStore: Record<string, Entitlements> = { ...DEMO_ENTITLEMENTS };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Get Entitlements
@@ -46,5 +55,39 @@ export function getDemoEntitlements(tenantId: string | null): Entitlements {
     return DEFAULT_ENTITLEMENTS;
   }
 
-  return DEMO_ENTITLEMENTS[tenantId] ?? DEFAULT_ENTITLEMENTS;
+  return entitlementsStore[tenantId] ?? DEFAULT_ENTITLEMENTS;
+}
+
+export function getTenantEntitlements(tenantId: string): Entitlements {
+  return entitlementsStore[tenantId] ?? { ...DEFAULT_ENTITLEMENTS };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Update Entitlements
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface UpdateEntitlementsInput {
+  maxAssessors?: number;
+  maxUploadsPerAssessment?: number;
+  maxReportsPerMonth?: number;
+  fundMandatesEnabled?: boolean;
+}
+
+export function updateTenantEntitlements(
+  tenantId: string,
+  updates: UpdateEntitlementsInput
+): Entitlements {
+  const current = entitlementsStore[tenantId] ?? { ...DEFAULT_ENTITLEMENTS };
+
+  const updated: Entitlements = {
+    ...current,
+    ...(updates.maxAssessors !== undefined && { maxAssessors: updates.maxAssessors }),
+    ...(updates.maxUploadsPerAssessment !== undefined && { maxUploadsPerAssessment: updates.maxUploadsPerAssessment }),
+    ...(updates.maxReportsPerMonth !== undefined && { maxReportsPerMonth: updates.maxReportsPerMonth }),
+    ...(updates.fundMandatesEnabled !== undefined && { fundMandatesEnabled: updates.fundMandatesEnabled }),
+  };
+
+  entitlementsStore[tenantId] = updated;
+
+  return updated;
 }

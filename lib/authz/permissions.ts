@@ -18,6 +18,8 @@ export const PROPOSAL_CREATE = "proposal:create";
 export const PROPOSAL_READ = "proposal:read";
 export const PROPOSAL_ASSIGN = "proposal:assign";
 
+export const FUND_MANDATE_MANAGE = "fund_mandate:manage";
+
 export const UPLOAD_CREATE = "upload:create";
 export const REPORT_GENERATE = "report:generate";
 export const LLM_USE = "llm:use";
@@ -38,6 +40,7 @@ export const PERMISSIONS = {
   PROPOSAL_CREATE,
   PROPOSAL_READ,
   PROPOSAL_ASSIGN,
+  FUND_MANDATE_MANAGE,
   UPLOAD_CREATE,
   REPORT_GENERATE,
   LLM_USE,

@@ -6,6 +6,7 @@ import {
   HttpError,
   logAdminAction,
 } from "@/lib/rbac";
+import { updateTenantEntitlements, getTenantEntitlements } from "@/lib/entitlements/demoEntitlements";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -15,12 +16,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const ctx = await getAuthzOrThrow();
 
-    // requireRole saas_admin
     if (ctx.role !== "saas_admin") {
       throw new HttpError(403, "Forbidden");
     }
 
-    // requirePermission subscriptions:update (maps to tenant:entitlements:update)
     if (!ctx.permissions.includes("subscriptions:update")) {
       throw new HttpError(403, "Forbidden");
     }
@@ -32,6 +31,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       maxUploadsPerAssessment?: number;
       maxReportsPerMonth?: number;
       plan?: string;
+      fundMandatesEnabled?: boolean;
     };
     try {
       body = await request.json();
@@ -39,17 +39,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       throw new HttpError(400, "Invalid JSON body");
     }
 
-    // Audit log
+    const currentEntitlements = getTenantEntitlements(id);
+
+    const updatedEntitlements = updateTenantEntitlements(id, {
+      maxAssessors: body.maxAssessors,
+      maxUploadsPerAssessment: body.maxUploadsPerAssessment,
+      maxReportsPerMonth: body.maxReportsPerMonth,
+      fundMandatesEnabled: body.fundMandatesEnabled,
+    });
+
     await logAdminAction(ctx, "subscription.update", "tenant", id, {
       entitlementUpdates: body,
+      previousFundMandatesEnabled: currentEntitlements.fundMandatesEnabled,
     });
 
     return jsonSuccess({
       tenantId: id,
       entitlements: {
-        maxAssessors: body.maxAssessors ?? 10,
-        maxUploadsPerAssessment: body.maxUploadsPerAssessment ?? 5,
-        maxReportsPerMonth: body.maxReportsPerMonth ?? 50,
+        ...updatedEntitlements,
         plan: body.plan ?? "professional",
         updatedAt: new Date().toISOString(),
       },

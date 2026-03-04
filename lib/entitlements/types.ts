@@ -12,6 +12,7 @@ export interface Entitlements {
   allowedLLMProviders: string[];
   modelAllowlist: string[];
   rateLimitRpm: number;
+  fundMandatesEnabled: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,4 +27,5 @@ export const DEFAULT_ENTITLEMENTS: Entitlements = {
   allowedLLMProviders: ["openai"],
   modelAllowlist: ["gpt-4o-mini"],
   rateLimitRpm: 10,
+  fundMandatesEnabled: false,
 };

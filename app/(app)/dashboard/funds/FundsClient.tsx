@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { PageHeader, StatCard, DataCard, StatusBadge } from "@/components/app";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { PageHeader, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -21,6 +25,15 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Wallet,
   Plus,
   LayoutGrid,
@@ -34,7 +47,14 @@ import {
   PauseCircle,
   ArrowRight,
   Sparkles,
+  ScrollText,
+  Edit,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
+import type { FundMandateTemplate, FundMandateStatus } from "@/lib/mock/fundMandates";
 
 const funds = [
   {
@@ -113,8 +133,94 @@ const statusVariants: Record<StatusKey, "success" | "warning" | "muted"> = {
   Closed: "muted",
 };
 
-export default function FundsClient() {
+const mandateStatusVariants: Record<FundMandateStatus, "success" | "warning" | "muted"> = {
+  active: "success",
+  draft: "warning",
+  inactive: "muted",
+};
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+interface FundsClientProps {
+  fundMandatesEnabled: boolean;
+  mandates: FundMandateTemplate[];
+}
+
+export default function FundsClient({ fundMandatesEnabled, mandates }: FundsClientProps) {
+  const router = useRouter();
   const [view, setView] = useState<"grid" | "table">("grid");
+  const [activeTab, setActiveTab] = useState<"funds" | "mandates">("funds");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [newMandate, setNewMandate] = useState({
+    name: "",
+    strategy: "",
+    geography: "",
+    minTicket: 0,
+    maxTicket: 0,
+    notes: "",
+  });
+
+  const handleCreateMandate = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/tenant/fund-mandates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMandate),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setIsCreateOpen(false);
+        setNewMandate({ name: "", strategy: "", geography: "", minTicket: 0, maxTicket: 0, notes: "" });
+        startTransition(() => {
+          router.refresh();
+        });
+      } else {
+        alert(data.error || "Failed to create mandate");
+      }
+    } catch {
+      alert("Network error");
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleStatusChange = async (id: string, status: FundMandateStatus) => {
+    try {
+      const res = await fetch(`/api/tenant/fund-mandates/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        startTransition(() => {
+          router.refresh();
+        });
+      } else {
+        alert(data.error || "Failed to update status");
+      }
+    } catch {
+      alert("Network error");
+    }
+  };
 
   const totalAum = funds.reduce((sum, f) => sum + parseInt(f.aum.replace(/[$,]/g, "")), 0);
   const totalAvailable = funds.reduce((sum, f) => sum + parseInt(f.available.replace(/[$,]/g, "")), 0);
@@ -127,12 +233,114 @@ export default function FundsClient() {
         title="Funds"
         subtitle="Manage funding sources and allocations"
         actions={
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Fund
-          </Button>
+          activeTab === "funds" ? (
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Fund
+            </Button>
+          ) : fundMandatesEnabled ? (
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Template
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Create Fund Mandate Template</DialogTitle>
+                  <DialogDescription>
+                    Define a new mandate template for fund investments.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={newMandate.name}
+                      onChange={(e) => setNewMandate({ ...newMandate, name: e.target.value })}
+                      placeholder="e.g., Growth Equity Mandate"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="strategy">Strategy</Label>
+                      <Input
+                        id="strategy"
+                        value={newMandate.strategy}
+                        onChange={(e) => setNewMandate({ ...newMandate, strategy: e.target.value })}
+                        placeholder="e.g., Growth Equity"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="geography">Geography</Label>
+                      <Input
+                        id="geography"
+                        value={newMandate.geography}
+                        onChange={(e) => setNewMandate({ ...newMandate, geography: e.target.value })}
+                        placeholder="e.g., North America"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="minTicket">Min Ticket ($)</Label>
+                      <Input
+                        id="minTicket"
+                        type="number"
+                        value={newMandate.minTicket}
+                        onChange={(e) => setNewMandate({ ...newMandate, minTicket: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="maxTicket">Max Ticket ($)</Label>
+                      <Input
+                        id="maxTicket"
+                        type="number"
+                        value={newMandate.maxTicket}
+                        onChange={(e) => setNewMandate({ ...newMandate, maxTicket: Number(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="notes">Notes (optional)</Label>
+                    <Input
+                      id="notes"
+                      value={newMandate.notes}
+                      onChange={(e) => setNewMandate({ ...newMandate, notes: e.target.value })}
+                      placeholder="Additional notes..."
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateMandate} disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Create Template
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : null
         }
       />
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "funds" | "mandates")}>
+        <TabsList>
+          <TabsTrigger value="funds">
+            <Wallet className="h-4 w-4 mr-2" />
+            Funds
+          </TabsTrigger>
+          <TabsTrigger value="mandates">
+            <ScrollText className="h-4 w-4 mr-2" />
+            Mandate Templates
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="funds" className="space-y-6 mt-6">
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -373,6 +581,111 @@ export default function FundsClient() {
           </Table>
         </DataCard>
       )}
+        </TabsContent>
+
+        <TabsContent value="mandates" className="space-y-6 mt-6">
+          {!fundMandatesEnabled ? (
+            <EmptyState
+              icon={AlertCircle}
+              title="Fund Mandates Not Enabled"
+              description="Fund Mandates are not enabled for this tenant. Contact your SaaS Admin to enable this feature."
+            />
+          ) : mandates.length === 0 ? (
+            <EmptyState
+              icon={ScrollText}
+              title="No Mandate Templates"
+              description="Create your first fund mandate template to get started."
+              action={{
+                label: "Create Template",
+                onClick: () => setIsCreateOpen(true),
+              }}
+            />
+          ) : (
+            <DataCard title="Fund Mandate Templates" description={`${mandates.length} template${mandates.length !== 1 ? "s" : ""}`} noPadding>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Strategy</TableHead>
+                    <TableHead>Geography</TableHead>
+                    <TableHead>Ticket Range</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-center">Version</TableHead>
+                    <TableHead>Updated</TableHead>
+                    <TableHead className="w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mandates.map((mandate) => (
+                    <TableRow key={mandate.id} className="group">
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{mandate.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{mandate.id}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{mandate.strategy}</TableCell>
+                      <TableCell className="text-muted-foreground">{mandate.geography}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {formatCurrency(mandate.minTicket)} - {formatCurrency(mandate.maxTicket)}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={mandateStatusVariants[mandate.status]} dot>
+                          {mandate.status.charAt(0).toUpperCase() + mandate.status.slice(1)}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        <Badge variant="outline">v{mandate.version}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {formatDate(mandate.updatedAt)}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {mandate.status !== "active" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(mandate.id, "active")}>
+                                <CheckCircle className="h-4 w-4 mr-2 text-emerald-600" />
+                                Activate
+                              </DropdownMenuItem>
+                            )}
+                            {mandate.status === "active" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(mandate.id, "inactive")}>
+                                <XCircle className="h-4 w-4 mr-2 text-amber-600" />
+                                Deactivate
+                              </DropdownMenuItem>
+                            )}
+                            {mandate.status === "inactive" && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(mandate.id, "draft")}>
+                                <FileText className="h-4 w-4 mr-2" />
+                                Set as Draft
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </DataCard>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

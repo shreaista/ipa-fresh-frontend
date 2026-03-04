@@ -1,8 +1,22 @@
-import { requireRoleWithTenantContext } from "@/lib/authz";
+import { requireRoleWithTenantContext, getAuthzContext } from "@/lib/authz";
+import { listFundMandates, type FundMandateTemplate } from "@/lib/mock/fundMandates";
 import FundsClient from "./FundsClient";
 
 export default async function FundsPage() {
-  await requireRoleWithTenantContext(["tenant_admin", "saas_admin"]);
+  const { tenantId } = await requireRoleWithTenantContext(["tenant_admin", "saas_admin"]);
+  const ctx = await getAuthzContext();
 
-  return <FundsClient />;
+  const fundMandatesEnabled = ctx.entitlements?.fundMandatesEnabled ?? false;
+  let mandates: FundMandateTemplate[] = [];
+
+  if (fundMandatesEnabled) {
+    mandates = listFundMandates(tenantId);
+  }
+
+  return (
+    <FundsClient
+      fundMandatesEnabled={fundMandatesEnabled}
+      mandates={mandates}
+    />
+  );
 }
