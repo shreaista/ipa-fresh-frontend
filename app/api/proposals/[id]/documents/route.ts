@@ -1,13 +1,12 @@
 // API routes for Proposal Document management
-// POST - Upload document
-// GET - List documents
-// DELETE - Delete document
+// POST - Upload document (tenant_admin/saas_admin only)
+// GET - List documents (all roles with proposal access)
 
 import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthzContext,
   requireTenantAccess,
-  requireAnyPermission,
+  requirePermission,
   canAccessProposal,
   jsonError,
   AuthzHttpError,
@@ -19,8 +18,6 @@ import { getProposalForUser } from "@/lib/mock/proposals";
 import {
   uploadProposalDocument,
   listProposalDocuments,
-  deleteProposalDocument,
-  validateBlobPath,
   ALLOWED_CONTENT_TYPES,
   MAX_FILE_SIZE,
 } from "@/lib/storage/proposalDocuments";
@@ -77,23 +74,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     requireTenantAccess(ctx, tenantId);
 
-    // Permission check: upload:create OR proposal:read
-    requireAnyPermission(ctx, [UPLOAD_CREATE, PROPOSAL_READ]);
+    // RBAC: Only tenant_admin and saas_admin can upload documents
+    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
+      throw new AuthzHttpError(403, "Only administrators can upload documents");
+    }
+
+    // Also require upload:create permission
+    requirePermission(ctx, UPLOAD_CREATE);
 
     const { id } = await context.params;
 
     // Get proposal and validate access
-    const proposal = await getProposalWithAccess(
+    await getProposalWithAccess(
       tenantId,
       ctx.user.id || "",
       ctx.role,
       id
     );
-
-    // If role is assessor, must also pass canAccessProposal
-    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
-      throw new AuthzHttpError(403, "Access denied to this proposal");
-    }
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -179,8 +176,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
     requireTenantAccess(ctx, tenantId);
 
-    // Permission check: upload:create OR proposal:read
-    requireAnyPermission(ctx, [UPLOAD_CREATE, PROPOSAL_READ]);
+    // Permission check: proposal:read for listing documents
+    requirePermission(ctx, PROPOSAL_READ);
 
     const { id } = await context.params;
 
@@ -212,80 +209,3 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE - Delete Document
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function DELETE(request: NextRequest, context: RouteContext) {
-  try {
-    const ctx = await getAuthzContext();
-
-    if (!ctx.user) {
-      return NextResponse.json(
-        { ok: false, error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    // Tenant isolation
-    const tenantId = ctx.tenantId ?? ctx.user.id;
-    if (!tenantId) {
-      throw new AuthzHttpError(400, "Tenant context required");
-    }
-    requireTenantAccess(ctx, tenantId);
-
-    // Permission check: upload:create OR proposal:read
-    requireAnyPermission(ctx, [UPLOAD_CREATE, PROPOSAL_READ]);
-
-    const { id } = await context.params;
-
-    // Get proposal and validate access
-    const proposal = await getProposalWithAccess(
-      tenantId,
-      ctx.user.id || "",
-      ctx.role,
-      id
-    );
-
-    // If role is assessor, must also pass canAccessProposal
-    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
-      throw new AuthzHttpError(403, "Access denied to this proposal");
-    }
-
-    const { searchParams } = new URL(request.url);
-    const blobPath = searchParams.get("blobPath");
-
-    if (!blobPath) {
-      throw new AuthzHttpError(400, "blobPath query parameter is required");
-    }
-
-    if (!validateBlobPath(blobPath, tenantId, id)) {
-      throw new AuthzHttpError(403, "Invalid blob path for this proposal");
-    }
-
-    const deleted = await deleteProposalDocument(tenantId, id, blobPath);
-
-    if (!deleted) {
-      throw new AuthzHttpError(404, "Document not found or already deleted");
-    }
-
-    logAudit({
-      action: "proposal_document.delete",
-      actorUserId: ctx.user.id || "",
-      actorEmail: ctx.user.email,
-      tenantId,
-      resourceType: "proposal_document",
-      resourceId: id,
-      details: {
-        blobPath,
-      },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      data: { message: "Document deleted successfully" },
-    });
-  } catch (error) {
-    return jsonError(error);
-  }
-}

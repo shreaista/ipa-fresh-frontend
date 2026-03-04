@@ -185,11 +185,12 @@ interface Queue {
 interface ProposalDetailClientProps {
   proposal: Proposal | null;
   canAssign: boolean;
+  canManageDocuments?: boolean;
   currentAssignment?: CurrentAssignment;
   error?: string;
 }
 
-export default function ProposalDetailClient({ proposal, canAssign, currentAssignment, error }: ProposalDetailClientProps) {
+export default function ProposalDetailClient({ proposal, canAssign, canManageDocuments = false, currentAssignment, error }: ProposalDetailClientProps) {
   // Document management state
   const [documents, setDocuments] = useState<ProposalDocumentBlob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -480,7 +481,7 @@ export default function ProposalDetailClient({ proposal, canAssign, currentAssig
 
     try {
       const res = await fetch(
-        `/api/proposals/${proposal.id}/documents?blobPath=${encodeURIComponent(blobPath)}`,
+        `/api/proposals/${proposal.id}/documents/delete?blobPath=${encodeURIComponent(blobPath)}`,
         { method: "DELETE" }
       );
 
@@ -913,30 +914,34 @@ export default function ProposalDetailClient({ proposal, canAssign, currentAssig
               )}
               Refresh
             </Button>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  handleUpload(file);
-                }
-              }}
-            />
-            <Button
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4 mr-1" />
-              )}
-              Upload File
-            </Button>
+            {canManageDocuments && (
+              <>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleUpload(file);
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-1" />
+                  )}
+                  Upload File
+                </Button>
+              </>
+            )}
           </div>
         }
         noPadding
@@ -1005,20 +1010,22 @@ export default function ProposalDetailClient({ proposal, canAssign, currentAssig
                       >
                         <Download className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(doc.blobPath, doc.filename)}
-                        disabled={deleting === doc.blobPath}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title="Delete"
-                      >
-                        {deleting === doc.blobPath ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
+                      {canManageDocuments && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(doc.blobPath, doc.filename)}
+                          disabled={deleting === doc.blobPath}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete"
+                        >
+                          {deleting === doc.blobPath ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

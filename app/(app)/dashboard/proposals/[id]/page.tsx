@@ -29,6 +29,9 @@ export default async function ProposalDetailPage({ params }: PageProps) {
   // Check if user can assign (tenant_admin or saas_admin)
   const canAssign = user.role === "tenant_admin" || user.role === "saas_admin";
 
+  // Check if user can manage documents (upload/delete) - tenant_admin or saas_admin only
+  const canManageDocuments = user.role === "tenant_admin" || user.role === "saas_admin";
+
   // Get current queue assignment if any
   const queueId = getProposalQueueId(result.proposal.id);
   const queue = queueId ? getQueueById(queueId) : null;
@@ -43,6 +46,7 @@ export default async function ProposalDetailPage({ params }: PageProps) {
     <ProposalDetailClient
       proposal={result.proposal}
       canAssign={canAssign}
+      canManageDocuments={canManageDocuments}
       currentAssignment={currentAssignment}
     />
   );
