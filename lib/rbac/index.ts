@@ -100,3 +100,28 @@ export {
   parsePagination,
   paginatedResponse,
 } from "./api";
+
+// HTTP Guards
+export type { SessionUser } from "./http";
+export {
+  HttpError,
+  requireUser,
+  requireRole as httpRequireRole,
+  requirePermission as httpRequirePermission,
+  requireTenantContext as httpRequireTenantContext,
+  getPermissionsForUser,
+  jsonError,
+  jsonSuccess,
+  toAuthContext,
+} from "./http";
+
+// Full Authz Context
+export type { FullAuthzContext } from "./withAuthz";
+export {
+  getAuthzOrThrow,
+  requireAuthzWithRole,
+  requireAuthzWithPermission,
+  requireAuthzWithRoleAndPermission,
+  requireTenantAdmin as requireTenantAdminAuthz,
+  requireSaaSAdmin as requireSaaSAdminAuthz,
+} from "./withAuthz";
