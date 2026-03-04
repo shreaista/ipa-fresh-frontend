@@ -4,6 +4,7 @@ import { getNavItemsForRole, filterNavByPermissions } from "@/lib/nav";
 import { AppShell } from "@/components/app-shell";
 import { getSessionSafe } from "@/lib/session";
 import { getActiveTenantId, isTenantRequired } from "@/lib/tenantContext";
+import { ToastProvider } from "@/components/ui/toast";
 
 export default async function DashboardLayout({
   children,
@@ -36,13 +37,15 @@ export default async function DashboardLayout({
   };
 
   return (
-    <AppShell
-      user={userInfo}
-      navItems={filteredNavItems}
-      permissions={permissions}
-      activeTenantId={activeTenantId}
-    >
-      {children}
-    </AppShell>
+    <ToastProvider>
+      <AppShell
+        user={userInfo}
+        navItems={filteredNavItems}
+        permissions={permissions}
+        activeTenantId={activeTenantId}
+      >
+        {children}
+      </AppShell>
+    </ToastProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
+import {
   Search,
   MoreHorizontal,
   Eye,
@@ -40,7 +56,6 @@ import {
   Download,
   LucideIcon,
   AlertCircle,
-  Users,
   User,
   Loader2,
 } from "lucide-react";
@@ -72,6 +87,13 @@ function formatAmount(amount: number): string {
   }).format(amount);
 }
 
+interface Assessor {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface ProposalsClientProps {
   proposals: Proposal[];
   error?: string;
@@ -81,15 +103,14 @@ interface ProposalsClientProps {
 
 async function assignProposal(
   proposalId: string,
-  assignToUserId?: string,
-  assignToUserName?: string,
-  assignToQueueId?: string
+  assessorUserId: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`/api/tenant/proposals/${proposalId}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignToUserId, assignToUserName, assignToQueueId }),
+      credentials: "include",
+      body: JSON.stringify({ assignedUserId: assessorUserId }),
     });
     const data = await res.json();
     return data;
@@ -98,39 +119,85 @@ async function assignProposal(
   }
 }
 
+async function fetchAssessors(): Promise<{ ok: boolean; data?: Assessor[]; error?: string }> {
+  try {
+    const res = await fetch("/api/tenant/users", {
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data.ok && data.data?.users) {
+      const assessors = data.data.users.filter(
+        (u: Assessor) => u.role === "assessor"
+      );
+      return { ok: true, data: assessors };
+    }
+    return { ok: false, error: data.error || "Failed to load assessors" };
+  } catch {
+    return { ok: false, error: "Network error" };
+  }
+}
+
 export default function ProposalsClient({ proposals, error, role, proposalCount }: ProposalsClientProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [, startTransition] = useTransition();
-  const [assigningId, setAssigningId] = useState<string | null>(null);
+  
+  // Assign modal state
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assigningProposal, setAssigningProposal] = useState<Proposal | null>(null);
+  const [assessors, setAssessors] = useState<Assessor[]>([]);
+  const [selectedAssessorId, setSelectedAssessorId] = useState<string>("");
+  const [loadingAssessors, setLoadingAssessors] = useState(false);
+  const [submittingAssignment, setSubmittingAssignment] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const canAssign = role === "tenant_admin" || role === "saas_admin";
 
-  const handleAssignToUser = async (proposalId: string) => {
-    setAssigningId(proposalId);
-    const result = await assignProposal(proposalId, "user-003", "Assessor User");
-    if (result.ok) {
-      startTransition(() => {
-        router.refresh();
-      });
+  const loadAssessors = useCallback(async () => {
+    setLoadingAssessors(true);
+    setAssignError(null);
+    const result = await fetchAssessors();
+    if (result.ok && result.data) {
+      setAssessors(result.data);
     } else {
-      alert(result.error || "Assignment failed");
+      setAssignError(result.error || "Failed to load assessors");
     }
-    setAssigningId(null);
-  };
+    setLoadingAssessors(false);
+  }, []);
 
-  const handleAssignToQueue = async (proposalId: string) => {
-    setAssigningId(proposalId);
-    const result = await assignProposal(proposalId, undefined, undefined, "queue-default");
+  const openAssignModal = useCallback(async (proposal: Proposal) => {
+    setAssigningProposal(proposal);
+    setSelectedAssessorId("");
+    setAssignError(null);
+    setAssignModalOpen(true);
+    if (assessors.length === 0) {
+      await loadAssessors();
+    }
+  }, [assessors.length, loadAssessors]);
+
+  const handleAssignSubmit = async () => {
+    if (!assigningProposal || !selectedAssessorId) return;
+    
+    setSubmittingAssignment(true);
+    setAssignError(null);
+    
+    const result = await assignProposal(assigningProposal.id, selectedAssessorId);
+    
     if (result.ok) {
+      const assessor = assessors.find(a => a.id === selectedAssessorId);
+      toast(`Assigned to ${assessor?.name || "assessor"}`);
+      setAssignModalOpen(false);
+      setAssigningProposal(null);
       startTransition(() => {
         router.refresh();
       });
     } else {
-      alert(result.error || "Assignment failed");
+      setAssignError(result.error || "Assignment failed");
     }
-    setAssigningId(null);
+    
+    setSubmittingAssignment(false);
   };
 
   const filteredProposals = proposals.filter((p) => {
@@ -372,36 +439,14 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
                           {canAssign && (proposal.status === "New" || !proposal.assignedToUserId) && (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuLabel>Assign To</DropdownMenuLabel>
                               <DropdownMenuItem
-                                onClick={() => {
-                                  if (assigningId !== proposal.id) {
-                                    handleAssignToUser(proposal.id);
-                                  }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openAssignModal(proposal);
                                 }}
-                                className={assigningId === proposal.id ? "opacity-50 cursor-wait" : ""}
                               >
-                                {assigningId === proposal.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <User className="h-4 w-4 mr-2" />
-                                )}
-                                Assessor User
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  if (assigningId !== proposal.id) {
-                                    handleAssignToQueue(proposal.id);
-                                  }
-                                }}
-                                className={assigningId === proposal.id ? "opacity-50 cursor-wait" : ""}
-                              >
-                                {assigningId === proposal.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Users className="h-4 w-4 mr-2" />
-                                )}
-                                Default Queue
+                                <UserPlus className="h-4 w-4 mr-2" />
+                                Assign
                               </DropdownMenuItem>
                             </>
                           )}
@@ -433,6 +478,98 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
           </Table>
         )}
       </DataCard>
+
+      {/* Assign Modal */}
+      <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Proposal</DialogTitle>
+            <DialogDescription>
+              {assigningProposal && (
+                <>
+                  Assign <span className="font-medium">{assigningProposal.name}</span> to an assessor.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {loadingAssessors ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Loading assessors...</span>
+              </div>
+            ) : assessors.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No assessors available</p>
+                <p className="text-sm mt-1">Add assessors to your tenant first.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="assessor-select" className="text-sm font-medium">
+                    Select Assessor
+                  </label>
+                  <Select value={selectedAssessorId} onValueChange={setSelectedAssessorId}>
+                    <SelectTrigger id="assessor-select">
+                      <SelectValue placeholder="Choose an assessor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assessors.map((assessor) => (
+                        <SelectItem key={assessor.id} value={assessor.id}>
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                              {assessor.name.split(" ").map(n => n[0]).join("")}
+                            </div>
+                            <div>
+                              <span className="font-medium">{assessor.name}</span>
+                              <span className="text-muted-foreground ml-2 text-xs">{assessor.email}</span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {assignError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{assignError}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAssignModalOpen(false)}
+              disabled={submittingAssignment}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignSubmit}
+              disabled={!selectedAssessorId || submittingAssignment || loadingAssessors}
+            >
+              {submittingAssignment ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Assign
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

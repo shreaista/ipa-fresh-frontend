@@ -64,7 +64,6 @@ export const NAV_BY_ROLE: Record<string, NavItem[]> = {
   ],
   assessor: [
     { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
-    { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
     { key: "queue", label: "My Queue", href: "/dashboard/queue", iconKey: "clipboard-list", roles: ["assessor"] },
     { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
   ],

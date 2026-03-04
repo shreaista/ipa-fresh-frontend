@@ -1,9 +1,9 @@
-import { requirePermissionWithTenantContext, PROPOSAL_READ } from "@/lib/authz";
+import { requireRoleWithTenantContext } from "@/lib/authz";
 import { listProposalsForUser } from "@/lib/mock/proposals";
 import ProposalsClient from "./ProposalsClient";
 
 export default async function ProposalsPage() {
-  const { user, tenantId } = await requirePermissionWithTenantContext(PROPOSAL_READ);
+  const { user, tenantId } = await requireRoleWithTenantContext(["tenant_admin", "saas_admin"]);
 
   const proposals = listProposalsForUser({
     tenantId,
