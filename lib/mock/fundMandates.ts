@@ -6,6 +6,16 @@ import "server-only";
 
 export type FundMandateStatus = "draft" | "active" | "inactive";
 
+export interface FundMandateFile {
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  uploadedByUserId: string;
+  version: number;
+  storageKey: string;
+}
+
 export interface FundMandateTemplate {
   id: string;
   tenantId: string;
@@ -19,6 +29,8 @@ export interface FundMandateTemplate {
   updatedAt: string;
   updatedByUserId: string;
   notes?: string;
+  latestFile?: FundMandateFile;
+  files: FundMandateFile[];
 }
 
 export interface CreateFundMandateInput {
@@ -57,6 +69,7 @@ const fundMandates: FundMandateTemplate[] = [
     updatedAt: "2026-02-15T10:30:00Z",
     updatedByUserId: "user-002",
     notes: "Focus on Series B and C stage companies",
+    files: [],
   },
   {
     id: "fm-002",
@@ -71,6 +84,7 @@ const fundMandates: FundMandateTemplate[] = [
     updatedAt: "2026-03-01T14:00:00Z",
     updatedByUserId: "user-002",
     notes: "ESG-focused investments only",
+    files: [],
   },
 ];
 
@@ -127,6 +141,7 @@ export function createFundMandate(
     updatedAt: new Date().toISOString(),
     updatedByUserId: actorUserId,
     notes: input.notes,
+    files: [],
   };
 
   fundMandates.push(newMandate);
@@ -198,4 +213,76 @@ export function setFundMandateStatus(
   mandate.updatedByUserId = actorUserId;
 
   return { ok: true, mandate };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File Management Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AddFileToMandateParams {
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  storageKey: string;
+}
+
+export interface AddFileToMandateResult {
+  ok: boolean;
+  mandate?: FundMandateTemplate;
+  fileVersion?: number;
+  error?: string;
+}
+
+export function addFileToMandate(
+  tenantId: string,
+  mandateId: string,
+  fileParams: AddFileToMandateParams,
+  actorUserId: string
+): AddFileToMandateResult {
+  const mandate = fundMandates.find(
+    (fm) => fm.id === mandateId && fm.tenantId === tenantId
+  );
+
+  if (!mandate) {
+    return { ok: false, error: "Fund mandate not found" };
+  }
+
+  const fileVersion = (mandate.latestFile?.version ?? 0) + 1;
+
+  const newFile: FundMandateFile = {
+    fileName: fileParams.fileName,
+    contentType: fileParams.contentType,
+    sizeBytes: fileParams.sizeBytes,
+    uploadedAt: new Date().toISOString(),
+    uploadedByUserId: actorUserId,
+    version: fileVersion,
+    storageKey: fileParams.storageKey,
+  };
+
+  mandate.files.push(newFile);
+  mandate.latestFile = newFile;
+  mandate.updatedAt = new Date().toISOString();
+  mandate.updatedByUserId = actorUserId;
+
+  return { ok: true, mandate, fileVersion };
+}
+
+export function getFileByVersion(
+  tenantId: string,
+  mandateId: string,
+  version: number | "latest"
+): FundMandateFile | undefined {
+  const mandate = fundMandates.find(
+    (fm) => fm.id === mandateId && fm.tenantId === tenantId
+  );
+
+  if (!mandate) {
+    return undefined;
+  }
+
+  if (version === "latest") {
+    return mandate.latestFile;
+  }
+
+  return mandate.files.find((f) => f.version === version);
 }

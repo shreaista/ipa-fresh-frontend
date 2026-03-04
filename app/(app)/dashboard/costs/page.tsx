@@ -1,17 +1,19 @@
-import { redirect } from "next/navigation";
-import { requirePagePermission, TENANT_COSTS_READ } from "@/lib/authz";
+import {
+  requireRBACPermissionWithTenantContext,
+  isForbidden,
+  RBAC_PERMISSIONS,
+} from "@/lib/authz";
 import CostsClient from "./CostsClient";
+import { ForbiddenPage } from "@/components/app/ForbiddenPage";
 
 export default async function CostsPage() {
-  // Requires tenant:costs:read permission
-  const user = await requirePagePermission(TENANT_COSTS_READ);
+  const result = await requireRBACPermissionWithTenantContext(
+    RBAC_PERMISSIONS.COSTS_READ
+  );
 
-  // tenant_admin must have tenant context
-  if (user.role === "tenant_admin" && !user.tenantId) {
-    redirect("/login");
+  if (isForbidden(result)) {
+    return <ForbiddenPage message={result.message} />;
   }
 
-  // saas_admin can view global costs without tenant context
-
-  return <CostsClient role={user.role} />;
+  return <CostsClient role={result.user.role} />;
 }

@@ -13,6 +13,7 @@ export interface Entitlements {
   modelAllowlist: string[];
   rateLimitRpm: number;
   fundMandatesEnabled: boolean;
+  canManageFundMandates: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,4 +29,5 @@ export const DEFAULT_ENTITLEMENTS: Entitlements = {
   modelAllowlist: ["gpt-4o-mini"],
   rateLimitRpm: 10,
   fundMandatesEnabled: false,
+  canManageFundMandates: false,
 };

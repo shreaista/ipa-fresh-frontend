@@ -17,6 +17,7 @@ const DEMO_ENTITLEMENTS: Record<string, Entitlements> = {
     modelAllowlist: ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet"],
     rateLimitRpm: 60,
     fundMandatesEnabled: true,
+    canManageFundMandates: true,
   },
   "tenant-002": {
     maxAssessors: 100,
@@ -27,6 +28,7 @@ const DEMO_ENTITLEMENTS: Record<string, Entitlements> = {
     modelAllowlist: ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet", "gemini-1.5-pro"],
     rateLimitRpm: 300,
     fundMandatesEnabled: false,
+    canManageFundMandates: false,
   },
   "demo-tenant": {
     maxAssessors: 10,
@@ -37,6 +39,7 @@ const DEMO_ENTITLEMENTS: Record<string, Entitlements> = {
     modelAllowlist: ["gpt-4o", "gpt-4o-mini"],
     rateLimitRpm: 30,
     fundMandatesEnabled: false,
+    canManageFundMandates: false,
   },
 };
 
@@ -71,6 +74,7 @@ export interface UpdateEntitlementsInput {
   maxUploadsPerAssessment?: number;
   maxReportsPerMonth?: number;
   fundMandatesEnabled?: boolean;
+  canManageFundMandates?: boolean;
 }
 
 export function updateTenantEntitlements(
@@ -85,6 +89,7 @@ export function updateTenantEntitlements(
     ...(updates.maxUploadsPerAssessment !== undefined && { maxUploadsPerAssessment: updates.maxUploadsPerAssessment }),
     ...(updates.maxReportsPerMonth !== undefined && { maxReportsPerMonth: updates.maxReportsPerMonth }),
     ...(updates.fundMandatesEnabled !== undefined && { fundMandatesEnabled: updates.fundMandatesEnabled }),
+    ...(updates.canManageFundMandates !== undefined && { canManageFundMandates: updates.canManageFundMandates }),
   };
 
   entitlementsStore[tenantId] = updated;

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getAuthzOrThrow,
+  requireSession,
+  requireUserRole,
+  requireTenant,
   jsonError,
-  jsonSuccess,
-  HttpError,
-  logAdminAction,
-} from "@/lib/rbac";
+  requireRBACPermission,
+  RBAC_PERMISSIONS,
+  AuthzHttpError,
+} from "@/lib/authz";
+import { logAdminAction } from "@/lib/rbac";
 import { assertCanCreateAssessor, isEntitlementError } from "@/lib/entitlements";
 
-// Mock users store
 const mockUsers = [
   { id: "user-001", email: "admin@acme.org", name: "Admin User", role: "tenant_admin", tenantId: "tenant-001" },
   { id: "user-002", email: "assessor1@acme.org", name: "Assessor One", role: "assessor", tenantId: "tenant-001" },
@@ -17,28 +19,14 @@ const mockUsers = [
 
 export async function GET() {
   try {
-    const ctx = await getAuthzOrThrow();
+    const session = await requireSession();
+    requireUserRole(session, ["tenant_admin", "saas_admin"]);
+    requireRBACPermission(session, RBAC_PERMISSIONS.USER_READ);
+    const tenantId = requireTenant(session);
 
-    // requireRole tenant_admin OR saas_admin
-    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
-      throw new HttpError(403, "Forbidden");
-    }
+    const users = mockUsers.filter((u) => u.tenantId === tenantId);
 
-    // requirePermission users:read
-    if (!ctx.permissions.includes("users:read")) {
-      throw new HttpError(403, "Forbidden");
-    }
-
-    // Filter by tenant for tenant_admin
-    let users = mockUsers;
-    if (ctx.role === "tenant_admin" && ctx.tenantId) {
-      users = mockUsers.filter((u) => u.tenantId === ctx.tenantId);
-    } else if (ctx.role === "saas_admin" && ctx.tenantId) {
-      // SaaS admin viewing specific tenant
-      users = mockUsers.filter((u) => u.tenantId === ctx.tenantId);
-    }
-
-    return jsonSuccess({ users });
+    return NextResponse.json({ ok: true, data: { users } });
   } catch (error) {
     return jsonError(error);
   }
@@ -54,47 +42,34 @@ interface CreateUserBody {
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await getAuthzOrThrow();
-
-    // requireRole tenant_admin OR saas_admin
-    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
-      throw new HttpError(403, "Forbidden");
-    }
-
-    // requirePermission users:create
-    if (!ctx.permissions.includes("users:create")) {
-      throw new HttpError(403, "Forbidden");
-    }
-
-    // Require tenant context
-    if (!ctx.tenantId) {
-      throw new HttpError(400, "Tenant context required");
-    }
+    const session = await requireSession();
+    requireUserRole(session, ["tenant_admin", "saas_admin"]);
+    requireRBACPermission(session, RBAC_PERMISSIONS.USER_CREATE);
+    const tenantId = requireTenant(session);
 
     let body: CreateUserBody;
     try {
       body = await request.json();
     } catch {
-      throw new HttpError(400, "Invalid JSON body");
+      throw new AuthzHttpError(400, "Invalid JSON body");
     }
 
     if (!body.email || typeof body.email !== "string") {
-      throw new HttpError(422, "Validation error: email is required");
+      throw new AuthzHttpError(422, "Validation error: email is required");
     }
 
     if (!body.role || !["tenant_admin", "assessor"].includes(body.role)) {
-      throw new HttpError(422, "Validation error: role must be 'tenant_admin' or 'assessor'");
+      throw new AuthzHttpError(422, "Validation error: role must be 'tenant_admin' or 'assessor'");
     }
 
     if ((body.role as string) === "saas_admin") {
-      throw new HttpError(403, "Cannot create saas_admin via this endpoint");
+      throw new AuthzHttpError(403, "Cannot create saas_admin via this endpoint");
     }
 
     if (body.role === "assessor") {
-      // TODO: Replace with DB count later
       const currentAssessorCount = 0;
       assertCanCreateAssessor(
-        { tenantId: ctx.tenantId, role: ctx.role } as Parameters<typeof assertCanCreateAssessor>[0],
+        { tenantId, role: session.role } as Parameters<typeof assertCanCreateAssessor>[0],
         currentAssessorCount
       );
     }
@@ -104,16 +79,18 @@ export async function POST(request: NextRequest) {
       email: body.email,
       name: body.name || body.email.split("@")[0],
       role: body.role,
-      tenantId: ctx.tenantId,
+      tenantId,
     };
 
-    // Audit log
-    await logAdminAction(ctx, "user.create", "user", newUser.id, {
-      email: newUser.email,
-      role: newUser.role,
-    });
+    await logAdminAction(
+      { userId: session.userId || "", email: session.email || "", role: session.role, tenantId, permissions: [], name: session.name || "" },
+      "user.create",
+      "user",
+      newUser.id,
+      { email: newUser.email, role: newUser.role }
+    );
 
-    return jsonSuccess({ user: newUser, created: true }, 201);
+    return NextResponse.json({ ok: true, data: { user: newUser, created: true } }, { status: 201 });
   } catch (error) {
     if (isEntitlementError(error)) {
       return NextResponse.json(

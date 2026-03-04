@@ -5,6 +5,10 @@ import { getSessionSafe } from "@/lib/session";
 import type { RoleKey } from "./roles";
 import { ROLE_PERMISSIONS } from "./rolePermissions";
 import type { Permission } from "./permissions";
+import {
+  type PermissionKey,
+  roleHasPermission as rbacRoleHasPermission,
+} from "@/lib/rbac/permissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page Guard Types
@@ -163,4 +167,66 @@ export async function requirePermissionWithTenantContext(
   }
 
   return { user, tenantId: user.tenantId };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RBAC Permission Guards (using lib/rbac/permissions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ForbiddenResult {
+  forbidden: true;
+  message: string;
+}
+
+export async function requireRBACPermission(
+  permission: PermissionKey
+): Promise<AuthenticatedUser | ForbiddenResult> {
+  const user = await requireAuth();
+
+  if (!rbacRoleHasPermission(user.role, permission)) {
+    return { forbidden: true, message: `Missing permission: ${permission}` };
+  }
+
+  return user;
+}
+
+export async function requireRBACPermissionStrict(
+  permission: PermissionKey
+): Promise<AuthenticatedUser> {
+  const user = await requireAuth();
+
+  if (!rbacRoleHasPermission(user.role, permission)) {
+    redirect("/dashboard");
+  }
+
+  return user;
+}
+
+export async function requireRBACPermissionWithTenantContext(
+  permission: PermissionKey
+): Promise<TenantContext | ForbiddenResult> {
+  const user = await requireAuth();
+
+  if (!rbacRoleHasPermission(user.role, permission)) {
+    return { forbidden: true, message: `Missing permission: ${permission}` };
+  }
+
+  if (user.role === "saas_admin") {
+    if (!user.tenantId) {
+      redirect("/dashboard/tenants");
+    }
+    return { user, tenantId: user.tenantId };
+  }
+
+  if (!user.tenantId) {
+    redirect("/login");
+  }
+
+  return { user, tenantId: user.tenantId };
+}
+
+export function isForbidden(
+  result: AuthenticatedUser | TenantContext | ForbiddenResult
+): result is ForbiddenResult {
+  return "forbidden" in result && result.forbidden === true;
 }

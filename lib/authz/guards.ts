@@ -7,6 +7,11 @@ import type { Permission } from "./permissions";
 import type { AuthorizationContext } from "./context";
 import { ForbiddenError } from "./errors";
 import { getSessionSafe } from "@/lib/session";
+import {
+  PERMISSIONS as RBAC_PERMISSIONS,
+  type PermissionKey,
+  roleHasPermission as rbacRoleHasPermission,
+} from "@/lib/rbac/permissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HTTP Error Class for API Routes
@@ -217,4 +222,62 @@ export function requireProposalAccess(ctx: AuthorizationContext, proposal: Propo
       "Access denied"
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RBAC Permission Guards (using lib/rbac/permissions)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export { RBAC_PERMISSIONS, type PermissionKey };
+
+export function requireRBACPermission(
+  session: SessionUser,
+  permission: PermissionKey
+): void {
+  if (!rbacRoleHasPermission(session.role, permission)) {
+    throw new AuthzHttpError(403, `Missing permission: ${permission}`);
+  }
+}
+
+export function requireRBACPermissions(
+  session: SessionUser,
+  permissions: PermissionKey[]
+): void {
+  for (const permission of permissions) {
+    if (!rbacRoleHasPermission(session.role, permission)) {
+      throw new AuthzHttpError(403, `Missing permission: ${permission}`);
+    }
+  }
+}
+
+export function requireAnyRBACPermission(
+  session: SessionUser,
+  permissions: PermissionKey[]
+): void {
+  const hasAny = permissions.some((p) => rbacRoleHasPermission(session.role, p));
+  if (!hasAny) {
+    throw new AuthzHttpError(
+      403,
+      `Missing one of required permissions: ${permissions.join(", ")}`
+    );
+  }
+}
+
+export function requireTenantMatch(
+  session: SessionUser,
+  resourceTenantId: string
+): void {
+  if (session.role === ROLES.SAAS_ADMIN) {
+    return;
+  }
+  if (session.tenantId !== resourceTenantId) {
+    throw new AuthzHttpError(403, "Tenant access denied");
+  }
+}
+
+export function hasRBACPermission(
+  session: SessionUser,
+  permission: PermissionKey
+): boolean {
+  return rbacRoleHasPermission(session.role, permission);
 }

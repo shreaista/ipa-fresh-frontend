@@ -1,31 +1,28 @@
 import { NextResponse } from "next/server";
-import { getAuthzContext, isAuthzError } from "@/lib/authz";
+import { requireSession, jsonError } from "@/lib/authz";
+import { getPermissionsForRole } from "@/lib/rbac/permissions";
+import { getTenantEntitlements } from "@/lib/entitlements/demoEntitlements";
 
 export async function GET() {
   try {
-    const ctx = await getAuthzContext();
+    const session = await requireSession();
+
+    const permissions = getPermissionsForRole(session.role);
+    const entitlements = session.tenantId
+      ? getTenantEntitlements(session.tenantId)
+      : null;
 
     return NextResponse.json({
       ok: true,
       data: {
-        role: ctx.role,
-        tenantId: ctx.tenantId,
-        activeTenantId: ctx.tenantId,
-        permissions: ctx.permissions,
-        entitlements: ctx.entitlements,
+        role: session.role,
+        tenantId: session.tenantId,
+        activeTenantId: session.tenantId,
+        permissions,
+        entitlements,
       },
     });
   } catch (error) {
-    if (isAuthzError(error)) {
-      return NextResponse.json(
-        { ok: false, error: "unauthenticated" },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      { ok: false, error: "internal_error" },
-      { status: 500 }
-    );
+    return jsonError(error);
   }
 }

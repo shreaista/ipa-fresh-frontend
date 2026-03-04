@@ -7,6 +7,7 @@ export default async function FundsPage() {
   const ctx = await getAuthzContext();
 
   const fundMandatesEnabled = ctx.entitlements?.fundMandatesEnabled ?? false;
+  const canManageFundMandates = ctx.entitlements?.canManageFundMandates ?? false;
   let mandates: FundMandateTemplate[] = [];
 
   if (fundMandatesEnabled) {
@@ -16,6 +17,7 @@ export default async function FundsPage() {
   return (
     <FundsClient
       fundMandatesEnabled={fundMandatesEnabled}
+      canManageFundMandates={canManageFundMandates}
       mandates={mandates}
     />
   );

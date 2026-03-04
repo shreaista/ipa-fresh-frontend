@@ -1,9 +1,19 @@
-import { requirePermissionWithTenantContext, USER_READ } from "@/lib/authz";
+import {
+  requireRBACPermissionWithTenantContext,
+  isForbidden,
+  RBAC_PERMISSIONS,
+} from "@/lib/authz";
 import UsersClient from "./UsersClient";
+import { ForbiddenPage } from "@/components/app/ForbiddenPage";
 
 export default async function UsersPage() {
-  // Requires user:read permission AND tenant context
-  await requirePermissionWithTenantContext(USER_READ);
+  const result = await requireRBACPermissionWithTenantContext(
+    RBAC_PERMISSIONS.USER_READ
+  );
+
+  if (isForbidden(result)) {
+    return <ForbiddenPage message={result.message} />;
+  }
 
   return <UsersClient />;
 }

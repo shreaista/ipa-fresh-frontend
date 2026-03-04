@@ -61,8 +61,14 @@ export {
   requirePermissionInTenant,
   canAccessProposal,
   requireProposalAccess,
+  RBAC_PERMISSIONS,
+  requireRBACPermission,
+  requireRBACPermissions,
+  requireAnyRBACPermission,
+  requireTenantMatch,
+  hasRBACPermission,
 } from "./guards";
-export type { SessionUser, Proposal } from "./guards";
+export type { SessionUser, Proposal, PermissionKey } from "./guards";
 
 // Page Guards (server components)
 export {
@@ -73,5 +79,9 @@ export {
   requirePermission as requirePagePermission,
   requireRoleOrPermission,
   requirePermissionWithTenantContext,
+  requireRBACPermission as requirePageRBACPermission,
+  requireRBACPermissionStrict,
+  requireRBACPermissionWithTenantContext,
+  isForbidden,
 } from "./pageGuards";
-export type { AuthenticatedUser, TenantContext } from "./pageGuards";
+export type { AuthenticatedUser, TenantContext, ForbiddenResult } from "./pageGuards";
