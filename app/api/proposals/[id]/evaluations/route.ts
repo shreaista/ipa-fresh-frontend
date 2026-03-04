@@ -1,14 +1,17 @@
-// NEW: API route to list Proposal Evaluations
+// API route to list Proposal Evaluations
 // GET /api/proposals/[id]/evaluations
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireSession,
-  requireTenant,
-  requireRBACPermission,
+  getAuthzContext,
+  requireTenantAccess,
+  requireAnyPermission,
+  canAccessProposal,
   jsonError,
   AuthzHttpError,
-  RBAC_PERMISSIONS,
+  LLM_USE,
+  REPORT_GENERATE,
+  type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
 import {
@@ -23,16 +26,32 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: llm:use OR report:generate
+    requireAnyPermission(ctx, [LLM_USE, REPORT_GENERATE]);
+
     const { id } = await context.params;
 
-    // NEW: Validate proposal access
+    // Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
-      userId: session.userId || "",
-      role: session.role,
+      userId: ctx.user.id || "",
+      role: ctx.role,
       proposalId: id,
     });
 
@@ -44,10 +63,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
-    // NEW: List all evaluations for this proposal
+    const proposal = proposalResult.proposal as Proposal;
+
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
+
+    // List all evaluations for this proposal
     const evaluations = await listEvaluations(tenantId, id);
 
-    // NEW: Optionally include the latest evaluation report
+    // Optionally include the latest evaluation report
     const includeLatest = request.nextUrl.searchParams.get("includeLatest") === "true";
     let latestReport = null;
 
@@ -58,13 +84,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
         evaluations[0].blobPath
       );
 
-      // Update fitScore in metadata from actual report
       if (latestReport) {
         evaluations[0].fitScore = latestReport.fitScore;
       }
     }
 
-    // NEW: Try to get fitScores for all evaluations (limited to first 5 for performance)
+    // Get fitScores for evaluations (limited to first 5 for performance)
     const evaluationsWithScores: EvaluationMetadata[] = [];
     for (let i = 0; i < Math.min(evaluations.length, 5); i++) {
       const eval_ = evaluations[i];
@@ -79,7 +104,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }
     }
 
-    // Add remaining evaluations without scores
     for (let i = 5; i < evaluations.length; i++) {
       evaluationsWithScores.push(evaluations[i]);
     }

@@ -1,14 +1,17 @@
-// NEW: API route to run Proposal Evaluation with LLM
+// API route to run Proposal Evaluation with LLM
 // POST /api/proposals/[id]/evaluate
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireSession,
-  requireTenant,
-  requireRBACPermission,
+  getAuthzContext,
+  requireTenantAccess,
+  requireAnyPermission,
+  canAccessProposal,
   jsonError,
   AuthzHttpError,
-  RBAC_PERMISSIONS,
+  LLM_USE,
+  REPORT_GENERATE,
+  type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
 import { getFundForProposal } from "@/lib/mock/funds";
@@ -22,22 +25,38 @@ interface RouteContext {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: llm:use OR report:generate
+    requireAnyPermission(ctx, [LLM_USE, REPORT_GENERATE]);
+
     const { id } = await context.params;
 
-    // NEW: Check rate limit before processing
+    // Check rate limit before processing
     const rateLimitResult = checkRateLimit(tenantId);
     if (!rateLimitResult.allowed) {
       throw new AuthzHttpError(429, rateLimitResult.message || "Rate limit exceeded");
     }
 
-    // NEW: Validate proposal access
+    // Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
-      userId: session.userId || "",
-      role: session.role,
+      userId: ctx.user.id || "",
+      role: ctx.role,
       proposalId: id,
     });
 
@@ -49,27 +68,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
-    const proposal = proposalResult.proposal;
+    const proposal = proposalResult.proposal as Proposal & { fund: string };
 
-    // NEW: Get fund and mandate key for this proposal
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
+
+    // Get fund and mandate key for this proposal
     const fund = getFundForProposal(tenantId, proposal.fund);
     const mandateKey = fund?.mandateKey || null;
 
-    // NEW: Run evaluation with LLM
+    // Run evaluation with LLM
     const result = await runEvaluation({
       tenantId,
       proposalId: id,
       fundName: proposal.fund,
       mandateKey,
-      evaluatedByUserId: session.userId || "",
-      evaluatedByEmail: session.email || "",
+      evaluatedByUserId: ctx.user.id || "",
+      evaluatedByEmail: ctx.user.email || "",
     });
 
-    // NEW: Audit log
+    // Audit log for evaluation run
     logAudit({
       action: "proposal.evaluate",
-      actorUserId: session.userId || "",
-      actorEmail: session.email,
+      actorUserId: ctx.user.id || "",
+      actorEmail: ctx.user.email,
       tenantId,
       resourceType: "proposal_evaluation",
       resourceId: id,
@@ -84,7 +108,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
     });
 
-    // NEW: Return result with rate limit info
     return NextResponse.json({
       ok: true,
       data: {

@@ -1,16 +1,19 @@
-// NEW: API routes for Proposal Document management
+// API routes for Proposal Document management
 // POST - Upload document
 // GET - List documents
 // DELETE - Delete document
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireSession,
-  requireTenant,
-  requireRBACPermission,
+  getAuthzContext,
+  requireTenantAccess,
+  requireAnyPermission,
+  canAccessProposal,
   jsonError,
   AuthzHttpError,
-  RBAC_PERMISSIONS,
+  UPLOAD_CREATE,
+  PROPOSAL_READ,
+  type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
 import {
@@ -27,13 +30,13 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-// NEW: Helper to validate proposal access
-async function validateProposalAccess(
+// Helper to get proposal with tenant/access validation
+async function getProposalWithAccess(
   tenantId: string,
   userId: string,
   role: string,
   proposalId: string
-) {
+): Promise<Proposal & { name?: string; fund?: string }> {
   const result = getProposalForUser({
     tenantId,
     userId,
@@ -49,7 +52,7 @@ async function validateProposalAccess(
     throw new AuthzHttpError(404, "Proposal not found");
   }
 
-  return result.proposal;
+  return result.proposal as Proposal & { name?: string; fund?: string };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,13 +61,39 @@ async function validateProposalAccess(
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_UPLOAD);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: upload:create OR proposal:read
+    requireAnyPermission(ctx, [UPLOAD_CREATE, PROPOSAL_READ]);
+
     const { id } = await context.params;
 
-    // NEW: Validate proposal access
-    await validateProposalAccess(tenantId, session.userId || "", session.role, id);
+    // Get proposal and validate access
+    const proposal = await getProposalWithAccess(
+      tenantId,
+      ctx.user.id || "",
+      ctx.role,
+      id
+    );
+
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -73,7 +102,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(400, "file is required");
     }
 
-    // NEW: Validate file type
     if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
       throw new AuthzHttpError(
         400,
@@ -81,7 +109,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // NEW: Validate file size
     if (file.size > MAX_FILE_SIZE) {
       throw new AuthzHttpError(400, "File size exceeds 25MB limit");
     }
@@ -95,15 +122,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       filename: file.name,
       contentType: file.type,
       buffer,
-      uploadedByUserId: session.userId || "",
-      uploadedByEmail: session.email || "",
+      uploadedByUserId: ctx.user.id || "",
+      uploadedByEmail: ctx.user.email || "",
     });
 
-    // NEW: Audit log
+    // Audit log for document upload
     logAudit({
       action: "proposal_document.upload",
-      actorUserId: session.userId || "",
-      actorEmail: session.email,
+      actorUserId: ctx.user.id || "",
+      actorEmail: ctx.user.email,
       tenantId,
       resourceType: "proposal_document",
       resourceId: id,
@@ -136,13 +163,39 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: upload:create OR proposal:read
+    requireAnyPermission(ctx, [UPLOAD_CREATE, PROPOSAL_READ]);
+
     const { id } = await context.params;
 
-    // NEW: Validate proposal access
-    await validateProposalAccess(tenantId, session.userId || "", session.role, id);
+    // Get proposal and validate access
+    const proposal = await getProposalWithAccess(
+      tenantId,
+      ctx.user.id || "",
+      ctx.role,
+      id
+    );
+
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
 
     const result = await listProposalDocuments(tenantId, id);
 
@@ -165,13 +218,39 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_DELETE);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: upload:create OR proposal:read
+    requireAnyPermission(ctx, [UPLOAD_CREATE, PROPOSAL_READ]);
+
     const { id } = await context.params;
 
-    // NEW: Validate proposal access
-    await validateProposalAccess(tenantId, session.userId || "", session.role, id);
+    // Get proposal and validate access
+    const proposal = await getProposalWithAccess(
+      tenantId,
+      ctx.user.id || "",
+      ctx.role,
+      id
+    );
+
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
 
     const { searchParams } = new URL(request.url);
     const blobPath = searchParams.get("blobPath");
@@ -180,7 +259,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(400, "blobPath query parameter is required");
     }
 
-    // NEW: Validate blob path belongs to this tenant/proposal
     if (!validateBlobPath(blobPath, tenantId, id)) {
       throw new AuthzHttpError(403, "Invalid blob path for this proposal");
     }
@@ -191,11 +269,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Document not found or already deleted");
     }
 
-    // NEW: Audit log
     logAudit({
       action: "proposal_document.delete",
-      actorUserId: session.userId || "",
-      actorEmail: session.email,
+      actorUserId: ctx.user.id || "",
+      actorEmail: ctx.user.email,
       tenantId,
       resourceType: "proposal_document",
       resourceId: id,
@@ -206,7 +283,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       ok: true,
-      message: "Document deleted successfully",
+      data: { message: "Document deleted successfully" },
     });
   } catch (error) {
     return jsonError(error);

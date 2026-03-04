@@ -1,19 +1,22 @@
-// NEW: Download route for Proposal Documents
+// Download route for Proposal Documents
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireSession,
-  requireTenant,
-  requireRBACPermission,
+  getAuthzContext,
+  requireTenantAccess,
+  requirePermission,
+  canAccessProposal,
   jsonError,
   AuthzHttpError,
-  RBAC_PERMISSIONS,
+  PROPOSAL_READ,
+  type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
 import {
   downloadProposalDocument,
   validateBlobPath,
 } from "@/lib/storage/proposalDocuments";
+import { logAudit } from "@/lib/audit";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -21,16 +24,32 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: proposal:read for downloads
+    requirePermission(ctx, PROPOSAL_READ);
+
     const { id } = await context.params;
 
-    // NEW: Validate proposal access
+    // Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
-      userId: session.userId || "",
-      role: session.role,
+      userId: ctx.user.id || "",
+      role: ctx.role,
       proposalId: id,
     });
 
@@ -42,6 +61,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
+    const proposal = proposalResult.proposal as Proposal;
+
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
+
     const { searchParams } = new URL(request.url);
     const blobPath = searchParams.get("blobPath");
 
@@ -49,7 +75,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(400, "blobPath query parameter is required");
     }
 
-    // NEW: Validate blob path belongs to this tenant/proposal
     if (!validateBlobPath(blobPath, tenantId, id)) {
       throw new AuthzHttpError(403, "Invalid blob path for this proposal");
     }
@@ -60,7 +85,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Document not found");
     }
 
-    // NEW: Return file as attachment (convert Buffer to Uint8Array for NextResponse)
+    // Audit log for document download
+    logAudit({
+      action: "proposal_document.download",
+      actorUserId: ctx.user.id || "",
+      actorEmail: ctx.user.email,
+      tenantId,
+      resourceType: "proposal_document",
+      resourceId: id,
+      details: {
+        blobPath,
+        filename: result.filename,
+      },
+    });
+
     const body = new Uint8Array(result.buffer);
     return new NextResponse(body, {
       headers: {

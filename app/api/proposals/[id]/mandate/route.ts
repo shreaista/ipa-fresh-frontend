@@ -1,14 +1,16 @@
-// NEW: API route to get Fund Mandate for a Proposal
+// API route to get Fund Mandate for a Proposal
 // GET /api/proposals/[id]/mandate
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireSession,
-  requireTenant,
-  requireRBACPermission,
+  getAuthzContext,
+  requireTenantAccess,
+  requirePermission,
+  canAccessProposal,
   jsonError,
   AuthzHttpError,
-  RBAC_PERMISSIONS,
+  PROPOSAL_READ,
+  type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
 import { getFundForProposal } from "@/lib/mock/funds";
@@ -19,7 +21,6 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-// NEW: Format ticket amount as currency
 function formatTicketAmount(amount: number): string {
   if (amount >= 1000000) {
     return `$${(amount / 1000000).toFixed(1)}M`;
@@ -32,16 +33,32 @@ function formatTicketAmount(amount: number): string {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    requireRBACPermission(session, RBAC_PERMISSIONS.PROPOSAL_DOCUMENT_READ);
-    const tenantId = requireTenant(session);
+    const ctx = await getAuthzContext();
+
+    if (!ctx.user) {
+      return NextResponse.json(
+        { ok: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Tenant isolation
+    const tenantId = ctx.tenantId ?? ctx.user.id;
+    if (!tenantId) {
+      throw new AuthzHttpError(400, "Tenant context required");
+    }
+    requireTenantAccess(ctx, tenantId);
+
+    // Permission check: proposal:read for mandate fetch
+    requirePermission(ctx, PROPOSAL_READ);
+
     const { id } = await context.params;
 
-    // NEW: Validate proposal access (same rules as proposal documents)
+    // Validate proposal access
     const proposalResult = getProposalForUser({
       tenantId,
-      userId: session.userId || "",
-      role: session.role,
+      userId: ctx.user.id || "",
+      role: ctx.role,
       proposalId: id,
     });
 
@@ -53,7 +70,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
-    const proposal = proposalResult.proposal;
+    const proposal = proposalResult.proposal as Proposal & { fund: string };
+
+    // If role is assessor, must also pass canAccessProposal
+    if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
+      throw new AuthzHttpError(403, "Access denied to this proposal");
+    }
 
     // NEW: Get fund for this proposal (by fund name)
     const fund = getFundForProposal(tenantId, proposal.fund);
