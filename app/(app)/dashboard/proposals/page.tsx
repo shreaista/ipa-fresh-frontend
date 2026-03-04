@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { requireAuth } from "@/lib/authz";
+import { requirePermissionWithTenantContext, PROPOSAL_READ } from "@/lib/authz";
 import ProposalsClient from "./ProposalsClient";
 import type { Proposal } from "@/lib/mock/proposals";
 
@@ -44,22 +44,8 @@ async function fetchProposals(): Promise<{ proposals: Proposal[]; error?: string
 }
 
 export default async function ProposalsPage() {
-  const user = await requireAuth();
-
-  const allowedRoles = ["tenant_admin", "assessor", "saas_admin"];
-  if (!allowedRoles.includes(user.role)) {
-    redirect("/dashboard");
-  }
-
-  // saas_admin must have activeTenantId to view proposals
-  if (user.role === "saas_admin" && !user.tenantId) {
-    redirect("/dashboard/tenants");
-  }
-
-  // tenant_admin and assessor must have tenantId
-  if ((user.role === "tenant_admin" || user.role === "assessor") && !user.tenantId) {
-    redirect("/login");
-  }
+  // Requires proposal:read permission AND tenant context
+  await requirePermissionWithTenantContext(PROPOSAL_READ);
 
   const { proposals, error } = await fetchProposals();
 

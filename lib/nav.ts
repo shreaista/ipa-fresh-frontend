@@ -15,10 +15,12 @@ export type IconKey =
   | "settings";
 
 export interface NavItem {
+  key: string;
   label: string;
   href: string;
   iconKey: IconKey;
-  permission?: string;
+  permissionKey?: string;
+  roles?: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,41 +29,41 @@ export interface NavItem {
 
 // SaaS Admin in global mode (no tenant selected)
 const SAAS_ADMIN_GLOBAL: NavItem[] = [
-  { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
-  { label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permission: "tenant:manage" },
-  { label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card" },
-  { label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permission: "tenant:costs:read" },
-  { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+  { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+  { key: "tenants", label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permissionKey: "tenant:manage", roles: ["saas_admin"] },
+  { key: "subscriptions", label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card", roles: ["saas_admin"] },
+  { key: "costs", label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permissionKey: "tenant:costs:read" },
+  { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
 ];
 
 // SaaS Admin viewing as a tenant
 const SAAS_ADMIN_TENANT: NavItem[] = [
-  { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
-  { label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permission: "tenant:manage" },
-  { label: "Funds", href: "/dashboard/funds", iconKey: "wallet" },
-  { label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
-  { label: "Users", href: "/dashboard/users", iconKey: "users", permission: "user:read" },
-  { label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card" },
-  { label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permission: "tenant:costs:read" },
-  { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+  { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+  { key: "tenants", label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permissionKey: "tenant:manage", roles: ["saas_admin"] },
+  { key: "funds", label: "Funds", href: "/dashboard/funds", iconKey: "wallet", roles: ["tenant_admin", "saas_admin"] },
+  { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
+  { key: "users", label: "Users", href: "/dashboard/users", iconKey: "users", permissionKey: "user:read" },
+  { key: "subscriptions", label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card", roles: ["saas_admin"] },
+  { key: "costs", label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permissionKey: "tenant:costs:read" },
+  { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
 ];
 
 export const NAV_BY_ROLE: Record<string, NavItem[]> = {
   saas_admin: SAAS_ADMIN_GLOBAL,
   saas_admin_tenant: SAAS_ADMIN_TENANT,
   tenant_admin: [
-    { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
-    { label: "Funds", href: "/dashboard/funds", iconKey: "wallet" },
-    { label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
-    { label: "Users", href: "/dashboard/users", iconKey: "users", permission: "user:read" },
-    { label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permission: "tenant:costs:read" },
-    { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+    { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+    { key: "funds", label: "Funds", href: "/dashboard/funds", iconKey: "wallet", roles: ["tenant_admin", "saas_admin"] },
+    { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
+    { key: "users", label: "Users", href: "/dashboard/users", iconKey: "users", permissionKey: "user:read" },
+    { key: "costs", label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permissionKey: "tenant:costs:read" },
+    { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
   ],
   assessor: [
-    { label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
-    { label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
-    { label: "My Queue", href: "/dashboard/queue", iconKey: "clipboard-list" },
-    { label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+    { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+    { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
+    { key: "queue", label: "My Queue", href: "/dashboard/queue", iconKey: "clipboard-list", roles: ["assessor"] },
+    { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
   ],
 };
 
@@ -76,10 +78,32 @@ export function getNavItemsForRole(role: string, activeTenantId?: string | null)
   return NAV_BY_ROLE[role] ?? NAV_BY_ROLE.assessor;
 }
 
+export function filterNavItems(
+  items: NavItem[],
+  permissions: string[],
+  role: string
+): NavItem[] {
+  return items.filter((item) => {
+    // Check role restriction first
+    if (item.roles && item.roles.length > 0) {
+      if (!item.roles.includes(role)) {
+        return false;
+      }
+    }
+    // Check permission restriction
+    if (item.permissionKey) {
+      if (!permissions.includes(item.permissionKey)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 export function filterNavByPermissions(items: NavItem[], permissions: string[]): NavItem[] {
   return items.filter((item) => {
-    if (!item.permission) return true;
-    return permissions.includes(item.permission);
+    if (!item.permissionKey) return true;
+    return permissions.includes(item.permissionKey);
   });
 }
 

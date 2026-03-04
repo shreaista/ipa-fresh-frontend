@@ -35,6 +35,7 @@ export function AppShell({ user, navItems, permissions, activeTenantId, children
         <Sidebar
           items={navItems}
           permissions={permissions}
+          role={user.role}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
@@ -42,6 +43,7 @@ export function AppShell({ user, navItems, permissions, activeTenantId, children
         <MobileSidebar
           items={navItems}
           permissions={permissions}
+          role={user.role}
           open={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
         />

@@ -69,5 +69,8 @@ export {
   requireRole as requirePageRole,
   requireTenantContext as requirePageTenantContext,
   requireRoleWithTenantContext,
+  requirePermission as requirePagePermission,
+  requireRoleOrPermission,
+  requirePermissionWithTenantContext,
 } from "./pageGuards";
 export type { AuthenticatedUser, TenantContext } from "./pageGuards";

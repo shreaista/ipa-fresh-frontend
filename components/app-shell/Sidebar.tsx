@@ -35,26 +35,37 @@ const iconMap: Record<IconKey, LucideIcon> = {
   "settings": Settings,
 };
 
-function filterItemsByPermission(
+function filterItemsByPermissionAndRole(
   items: NavItem[],
-  permissions: string[]
+  permissions: string[],
+  role: string
 ): NavItem[] {
   return items.filter((item) => {
-    if (!item.permission) return true;
-    return permissions.includes(item.permission);
+    if (item.roles && item.roles.length > 0) {
+      if (!item.roles.includes(role)) {
+        return false;
+      }
+    }
+    if (item.permissionKey) {
+      if (!permissions.includes(item.permissionKey)) {
+        return false;
+      }
+    }
+    return true;
   });
 }
 
 interface SidebarProps {
   items: NavItem[];
   permissions: string[];
+  role: string;
   collapsed: boolean;
   onToggle: () => void;
 }
 
-export function Sidebar({ items, permissions, collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ items, permissions, role, collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const filteredItems = filterItemsByPermission(items, permissions);
+  const filteredItems = filterItemsByPermissionAndRole(items, permissions, role);
 
   return (
     <aside
@@ -123,13 +134,14 @@ export function Sidebar({ items, permissions, collapsed, onToggle }: SidebarProp
 interface MobileSidebarProps {
   items: NavItem[];
   permissions: string[];
+  role: string;
   open: boolean;
   onClose: () => void;
 }
 
-export function MobileSidebar({ items, permissions, open, onClose }: MobileSidebarProps) {
+export function MobileSidebar({ items, permissions, role, open, onClose }: MobileSidebarProps) {
   const pathname = usePathname();
-  const filteredItems = filterItemsByPermission(items, permissions);
+  const filteredItems = filterItemsByPermissionAndRole(items, permissions, role);
 
   if (!open) return null;
 

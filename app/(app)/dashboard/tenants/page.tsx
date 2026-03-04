@@ -1,8 +1,9 @@
-import { requirePageRole } from "@/lib/authz";
+import { requireRoleOrPermission, TENANT_MANAGE } from "@/lib/authz";
 import TenantsClient from "./TenantsClient";
 
 export default async function TenantsPage() {
-  await requirePageRole(["saas_admin"]);
+  // SaaS Admin only OR permission tenant:manage
+  await requireRoleOrPermission(["saas_admin"], TENANT_MANAGE);
 
   return <TenantsClient />;
 }
