@@ -65,10 +65,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const { searchParams } = new URL(request.url);
-    const blobPath = searchParams.get("blobPath");
+    const blobPath = searchParams.get("key");
 
     if (!blobPath) {
-      throw new AuthzHttpError(400, "blobPath query parameter is required");
+      throw new AuthzHttpError(400, "key query parameter is required");
     }
 
     if (!validateBlobPath(blobPath, tenantId, id)) {

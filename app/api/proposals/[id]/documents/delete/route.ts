@@ -1,6 +1,6 @@
 // Delete route for Proposal Documents
 // DELETE - Remove a document from blob storage
-// RBAC: tenant_admin and saas_admin only (assessors cannot delete)
+// RBAC: tenant_admin, saas_admin, and assessor
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -36,9 +36,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Require active tenant context
     const tenantId = await requireActiveTenantId();
 
-    // RBAC: Only tenant_admin and saas_admin can delete documents
-    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
-      throw new AuthzHttpError(403, "Only administrators can delete documents");
+    // RBAC: tenant_admin, saas_admin, and assessor can delete documents
+    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin" && ctx.role !== "assessor") {
+      throw new AuthzHttpError(403, "Only administrators and assessors can delete documents");
     }
 
     // Also require upload:create permission
@@ -63,10 +63,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { searchParams } = new URL(request.url);
-    const blobPath = searchParams.get("blobPath");
+    const blobPath = searchParams.get("key");
 
     if (!blobPath) {
-      throw new AuthzHttpError(400, "blobPath query parameter is required");
+      throw new AuthzHttpError(400, "key query parameter is required");
     }
 
     if (!validateBlobPath(blobPath, tenantId, id)) {

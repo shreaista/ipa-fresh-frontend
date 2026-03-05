@@ -24,6 +24,7 @@ export interface UploadBlobParams {
   path: string;
   contentType: string;
   buffer: Buffer;
+  metadata?: Record<string, string>;
 }
 
 export interface UploadBlobResult {
@@ -135,6 +136,25 @@ function isAzureConfigured(): boolean {
   );
 }
 
+/**
+ * Returns the current storage mode and configuration status.
+ * Used to inform API consumers about storage configuration.
+ */
+export function getStorageStatus(): {
+  configured: boolean;
+  mode: "azure" | "memory";
+  message: string;
+} {
+  const configured = isAzureConfigured();
+  return {
+    configured,
+    mode: configured ? "azure" : "memory",
+    message: configured
+      ? "Azure Blob Storage is configured"
+      : "Azure Storage not configured. Using in-memory storage (data will be lost on restart). Set AZURE_STORAGE_CONNECTION_STRING and AZURE_STORAGE_CONTAINER environment variables.",
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Azure Blob Client (lazy loaded)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,7 +194,7 @@ async function getContainerClient(containerName: string): Promise<unknown> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function uploadBlob(params: UploadBlobParams): Promise<UploadBlobResult> {
-  const { container, path, contentType, buffer } = params;
+  const { container, path, contentType, buffer, metadata } = params;
   const uploadedAt = new Date().toISOString();
 
   if (isAzureConfigured()) {
@@ -185,6 +205,7 @@ export async function uploadBlob(params: UploadBlobParams): Promise<UploadBlobRe
         const blockBlobClient = (containerClient as any).getBlockBlobClient(path);
         await blockBlobClient.upload(buffer, buffer.length, {
           blobHTTPHeaders: { blobContentType: contentType },
+          metadata: metadata || undefined,
         });
 
         return {

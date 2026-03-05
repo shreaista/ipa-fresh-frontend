@@ -1,9 +1,9 @@
 import "server-only";
 
-// NEW: Azure Blob Storage Helper for Proposal Documents
+// Azure Blob Storage Helper for Proposal Documents
 //
 // Path structure:
-//   tenants/{tenantId}/proposals/{proposalId}/{timestamp}/{filename}
+//   tenants/{tenantId}/proposals/{proposalId}/documents/{timestamp}-{safeFilename}
 //
 // Timestamp format: YYYYMMDDTHHmmssZ (UTC)
 
@@ -15,8 +15,11 @@ import {
   getDefaultContainer,
   generateTimestamp,
   parseTimestampFromPath,
+  getStorageStatus,
   type BlobMetadata,
 } from "./azureBlob";
+
+export { getStorageStatus };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -106,8 +109,20 @@ export function validateFile(file: File): { valid: boolean; error?: string } {
 // Path Utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Creates a safe filename:
+ * - Strips any path components (keeps only the filename)
+ * - Replaces spaces with underscores
+ * - Removes any characters that aren't alphanumeric, dot, underscore, or hyphen
+ */
 function sanitizeFilename(filename: string): string {
-  return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  // Strip path separators - keep only the filename
+  const baseName = filename.replace(/^.*[\\/]/, "");
+  // Replace spaces with underscores, then remove any other unsafe characters
+  return baseName
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_"); // collapse multiple underscores
 }
 
 function buildProposalDocumentPath(
@@ -117,11 +132,11 @@ function buildProposalDocumentPath(
 ): string {
   const timestamp = generateTimestamp();
   const sanitized = sanitizeFilename(filename);
-  return `tenants/${tenantId}/proposals/${proposalId}/${timestamp}/${sanitized}`;
+  return `tenants/${tenantId}/proposals/${proposalId}/documents/${timestamp}-${sanitized}`;
 }
 
 function getProposalDocumentsPrefix(tenantId: string, proposalId: string): string {
-  return `tenants/${tenantId}/proposals/${proposalId}/`;
+  return `tenants/${tenantId}/proposals/${proposalId}/documents/`;
 }
 
 function extractFilenameFromPath(blobPath: string): string {
@@ -134,13 +149,13 @@ function extractTimestampFromPath(blobPath: string): string {
   return match ? match[1] : "";
 }
 
-// NEW: Validate blob path belongs to correct tenant/proposal
+// Validate blob path belongs to correct tenant/proposal
 export function validateBlobPath(
   blobPath: string,
   tenantId: string,
   proposalId: string
 ): boolean {
-  const expectedPrefix = `tenants/${tenantId}/proposals/${proposalId}/`;
+  const expectedPrefix = `tenants/${tenantId}/proposals/${proposalId}/documents/`;
   return blobPath.startsWith(expectedPrefix);
 }
 
@@ -161,6 +176,12 @@ export async function uploadProposalDocument(
     path: blobPath,
     contentType,
     buffer,
+    metadata: {
+      tenantId,
+      proposalId,
+      originalFilename: filename,
+      uploadedBy: uploadedByEmail,
+    },
   });
 
   return {

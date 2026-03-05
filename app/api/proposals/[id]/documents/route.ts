@@ -1,5 +1,5 @@
 // API routes for Proposal Document management
-// POST - Upload document (tenant_admin/saas_admin only)
+// POST - Upload document (tenant_admin, saas_admin, assessor)
 // GET - List documents (all roles with proposal access)
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,6 +18,7 @@ import { getProposalForUser } from "@/lib/mock/proposals";
 import {
   uploadProposalDocument,
   listProposalDocuments,
+  getStorageStatus,
   ALLOWED_CONTENT_TYPES,
   MAX_FILE_SIZE,
 } from "@/lib/storage/proposalDocuments";
@@ -70,9 +71,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Require active tenant context
     const tenantId = await requireActiveTenantId();
 
-    // RBAC: Only tenant_admin and saas_admin can upload documents
-    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
-      throw new AuthzHttpError(403, "Only administrators can upload documents");
+    // RBAC: tenant_admin, saas_admin, and assessor can upload documents
+    if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin" && ctx.role !== "assessor") {
+      throw new AuthzHttpError(403, "Only administrators and assessors can upload documents");
     }
 
     // Also require upload:create permission
@@ -135,6 +136,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
     });
 
+    const storage = getStorageStatus();
+
     return NextResponse.json({
       ok: true,
       data: {
@@ -143,6 +146,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
         size: result.size,
         uploadedAt: result.uploadedAt,
         uploadedBy: result.uploadedBy,
+        storage: {
+          mode: storage.mode,
+          configured: storage.configured,
+          message: storage.configured ? undefined : storage.message,
+        },
       },
     });
   } catch (error) {
@@ -187,6 +195,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const result = await listProposalDocuments(tenantId, id);
+    const storage = getStorageStatus();
 
     return NextResponse.json({
       ok: true,
@@ -194,6 +203,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
         grouped: result.grouped,
         flat: result.flat,
         count: result.flat.length,
+        storage: {
+          mode: storage.mode,
+          configured: storage.configured,
+          message: storage.configured ? undefined : storage.message,
+        },
       },
     });
   } catch (error) {

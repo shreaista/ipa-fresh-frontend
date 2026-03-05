@@ -537,16 +537,16 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
     }
   };
 
-  // NEW: Handle file download
+  // Handle file download
   const handleDownload = (blobPath: string) => {
     if (!proposal) return;
     window.open(
-      `/api/proposals/${proposal.id}/documents/download?blobPath=${encodeURIComponent(blobPath)}`,
+      `/api/proposals/${proposal.id}/documents/download?key=${encodeURIComponent(blobPath)}`,
       "_blank"
     );
   };
 
-  // NEW: Handle file delete
+  // Handle file delete
   const handleDelete = async (blobPath: string, filename: string) => {
     if (!proposal) return;
     if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
@@ -556,7 +556,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
     try {
       const res = await fetch(
-        `/api/proposals/${proposal.id}/documents/delete?blobPath=${encodeURIComponent(blobPath)}`,
+        `/api/proposals/${proposal.id}/documents/delete?key=${encodeURIComponent(blobPath)}`,
         { method: "DELETE" }
       );
 
@@ -1117,7 +1117,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           <EmptyState
             icon={FileText}
             title="No Documents"
-            description="Upload your first document to get started."
+            description="No documents uploaded yet."
           />
         ) : (
           <Table>
