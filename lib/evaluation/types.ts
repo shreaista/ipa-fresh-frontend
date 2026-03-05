@@ -37,7 +37,7 @@ export const EvaluationReportSchema = z.object({
     extractionWarnings: z.array(z.string()),
   }),
 
-  fitScore: z.number().min(0).max(100),
+  fitScore: z.number().min(0).max(100).nullable(),
   mandateSummary: z.string(),
   proposalSummary: z.string(),
   strengths: z.array(z.string()),

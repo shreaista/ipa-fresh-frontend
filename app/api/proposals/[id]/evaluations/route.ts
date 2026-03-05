@@ -17,7 +17,6 @@ import { getProposalForUser } from "@/lib/mock/proposals";
 import {
   listEvaluations,
   downloadEvaluation,
-  type EvaluationMetadata,
 } from "@/lib/evaluation/proposalEvaluator";
 
 interface RouteContext {
@@ -70,10 +69,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(403, "Access denied to this proposal");
     }
 
-    // List all evaluations for this proposal
-    const evaluations = await listEvaluations(tenantId, id);
+    // List all evaluations with full data (fitScore, confidence, model, engineType, inputs)
+    const evaluations = await listEvaluations(tenantId, id, true);
 
-    // Optionally include the latest evaluation report
+    // Optionally include the latest full evaluation report
     const includeLatest = request.nextUrl.searchParams.get("includeLatest") === "true";
     let latestReport = null;
 
@@ -83,35 +82,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
         id,
         evaluations[0].blobPath
       );
-
-      if (latestReport) {
-        evaluations[0].fitScore = latestReport.fitScore;
-      }
-    }
-
-    // Get fitScores for evaluations (limited to first 5 for performance)
-    const evaluationsWithScores: EvaluationMetadata[] = [];
-    for (let i = 0; i < Math.min(evaluations.length, 5); i++) {
-      const eval_ = evaluations[i];
-      if (i === 0 && latestReport) {
-        evaluationsWithScores.push({ ...eval_, fitScore: latestReport.fitScore });
-      } else {
-        const report = await downloadEvaluation(tenantId, id, eval_.blobPath);
-        evaluationsWithScores.push({
-          ...eval_,
-          fitScore: report?.fitScore || 0,
-        });
-      }
-    }
-
-    for (let i = 5; i < evaluations.length; i++) {
-      evaluationsWithScores.push(evaluations[i]);
     }
 
     return NextResponse.json({
       ok: true,
       data: {
-        evaluations: evaluationsWithScores,
+        evaluations,
         count: evaluations.length,
         latestReport,
       },

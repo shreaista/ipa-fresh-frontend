@@ -41,7 +41,14 @@ export interface EvaluationMetadata {
   blobPath: string;
   evaluationId: string;
   evaluatedAt: string;
-  fitScore: number;
+  fitScore: number | null;
+  confidence?: "low" | "medium" | "high";
+  model?: string;
+  engineType?: "stub" | "llm" | "azure-openai";
+  inputs?: {
+    proposalDocuments: number;
+    mandateTemplates: number;
+  };
   timestamp: string;
 }
 
@@ -113,7 +120,8 @@ export async function uploadEvaluationJson(
 
 export async function listEvaluations(
   tenantId: string,
-  proposalId: string
+  proposalId: string,
+  loadFullData: boolean = false
 ): Promise<EvaluationMetadata[]> {
   const container = getDefaultContainer();
   const prefix = getEvaluationsPrefix(tenantId, proposalId);
@@ -128,13 +136,34 @@ export async function listEvaluations(
     const timestamp = extractTimestampFromPath(blob.path);
     const parsedDate = parseTimestampFromPath(blob.path);
 
-    evaluations.push({
+    const metadata: EvaluationMetadata = {
       blobPath: blob.path,
       evaluationId: timestamp,
       evaluatedAt: parsedDate?.toISOString() || blob.lastModified,
-      fitScore: 0,
+      fitScore: null,
       timestamp,
-    });
+    };
+
+    if (loadFullData) {
+      const result = await downloadBlob(container, blob.path);
+      if (result) {
+        try {
+          const report = JSON.parse(result.buffer.toString("utf-8")) as EvaluationReport;
+          metadata.fitScore = report.fitScore;
+          metadata.confidence = report.confidence;
+          metadata.model = report.model;
+          metadata.engineType = report.engineType;
+          metadata.inputs = {
+            proposalDocuments: report.inputs.proposalDocuments,
+            mandateTemplates: report.inputs.mandateTemplates,
+          };
+        } catch {
+          // JSON parse failed, leave defaults
+        }
+      }
+    }
+
+    evaluations.push(metadata);
   }
 
   evaluations.sort((a, b) => {
@@ -172,21 +201,39 @@ export async function downloadEvaluation(
 // Stub Evaluation (Fallback when OpenAI not configured)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: Generate stub evaluation when LLM is not available
+// Generate stub evaluation when LLM is not available
 function generateStubEvaluation(
   proposalDocCount: number,
   mandateTemplateCount: number,
   mandateKey: string | null
 ): {
-  fitScore: number;
+  fitScore: number | null;
   mandateSummary: string;
   proposalSummary: string;
   strengths: string[];
   risks: string[];
   recommendations: string[];
   confidence: "low" | "medium" | "high";
+  extractionWarnings: string[];
 } {
-  let fitScore = 70;
+  // If no documents AND no templates, score is not meaningful
+  if (proposalDocCount === 0 && mandateTemplateCount === 0) {
+    return {
+      fitScore: null,
+      mandateSummary: "No fund mandate template available for evaluation.",
+      proposalSummary: "No proposal documents uploaded yet.",
+      strengths: [],
+      risks: ["No proposal documents uploaded", "No mandate templates available"],
+      recommendations: [
+        "Upload proposal documents before running evaluation",
+        "Ensure fund mandate templates are configured",
+      ],
+      confidence: "low",
+      extractionWarnings: ["No proposal docs or mandate templates - score not computed (stub)"],
+    };
+  }
+
+  let fitScore: number = 70;
   if (proposalDocCount >= 2) fitScore += 10;
   if (mandateTemplateCount >= 1) fitScore += 5;
   fitScore = Math.min(fitScore, 95);
@@ -212,6 +259,7 @@ function generateStubEvaluation(
       "Schedule follow-up meeting with applicant if needed",
     ],
     confidence: "low",
+    extractionWarnings: [],
   };
 }
 
@@ -331,13 +379,20 @@ export async function runEvaluation(
           totalCharactersProcessed: extractedContent.totalCharacters,
           extractionWarnings: [
             ...extractedContent.extractionWarnings,
+            ...stubResult.extractionWarnings,
             llmResult.provider === "azure-openai"
               ? `Azure OpenAI call failed: ${llmResult.error}`
               : `OpenAI call failed: ${llmResult.error}`,
           ],
         },
 
-        ...stubResult,
+        fitScore: stubResult.fitScore,
+        mandateSummary: stubResult.mandateSummary,
+        proposalSummary: stubResult.proposalSummary,
+        strengths: stubResult.strengths,
+        risks: stubResult.risks,
+        recommendations: stubResult.recommendations,
+        confidence: stubResult.confidence,
 
         model: "stub-fallback",
         version: "2.0.0",
@@ -367,10 +422,19 @@ export async function runEvaluation(
         mandateTemplates: mandateTemplates.length,
         mandateKey,
         totalCharactersProcessed: 0,
-        extractionWarnings: ["No LLM provider configured (set AZURE_OPENAI_* or OPENAI_API_KEY) - using stub evaluation"],
+        extractionWarnings: [
+          ...stubResult.extractionWarnings,
+          "No LLM provider configured (set AZURE_OPENAI_* or OPENAI_API_KEY) - using stub evaluation",
+        ],
       },
 
-      ...stubResult,
+      fitScore: stubResult.fitScore,
+      mandateSummary: stubResult.mandateSummary,
+      proposalSummary: stubResult.proposalSummary,
+      strengths: stubResult.strengths,
+      risks: stubResult.risks,
+      recommendations: stubResult.recommendations,
+      confidence: stubResult.confidence,
 
       model: "stub",
       version: "2.0.0",

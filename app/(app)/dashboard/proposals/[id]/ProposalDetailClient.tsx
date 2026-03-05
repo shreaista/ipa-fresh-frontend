@@ -46,6 +46,7 @@ import {
   History,
   ShieldCheck,
   Info,
+  Eye,
 } from "lucide-react";
 import type { Proposal, ProposalStatus } from "@/lib/mock/proposals";
 import {
@@ -94,12 +95,12 @@ interface MandateData {
   templateFiles: MandateTemplateFile[];
 }
 
-// NEW: Types for evaluation
+// Types for evaluation
 interface EvaluationReport {
   evaluationId: string;
   evaluatedAt: string;
   evaluatedByEmail: string;
-  fitScore: number;
+  fitScore: number | null;
   mandateSummary: string;
   proposalSummary: string;
   strengths: string[];
@@ -113,14 +114,21 @@ interface EvaluationReport {
     totalCharactersProcessed?: number;
     extractionWarnings?: string[];
   };
-  engineType: "stub" | "llm";
+  engineType: "stub" | "llm" | "azure-openai";
 }
 
 interface EvaluationMetadata {
   blobPath: string;
   evaluationId: string;
   evaluatedAt: string;
-  fitScore: number;
+  fitScore: number | null;
+  confidence?: "low" | "medium" | "high";
+  model?: string;
+  engineType?: "stub" | "llm" | "azure-openai";
+  inputs?: {
+    proposalDocuments: number;
+    mandateTemplates: number;
+  };
 }
 
 // NEW: Types for proposal documents
@@ -447,13 +455,31 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
     setEvaluating(false);
   };
 
-  // NEW: Download evaluation
+  // Download evaluation JSON
   const handleDownloadEvaluation = (blobPath: string) => {
     if (!proposal) return;
     window.open(
       `/api/proposals/${proposal.id}/evaluations/download?blobPath=${encodeURIComponent(blobPath)}`,
       "_blank"
     );
+  };
+
+  // View a specific evaluation (load it into the main panel)
+  const handleViewEvaluation = async (blobPath: string) => {
+    if (!proposal) return;
+    setEvaluationsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/proposals/${proposal.id}/evaluations/download?blobPath=${encodeURIComponent(blobPath)}`
+      );
+      if (res.ok) {
+        const report = await res.json();
+        setLatestEvaluation(report);
+      }
+    } catch {
+      console.error("Failed to load evaluation");
+    }
+    setEvaluationsLoading(false);
   };
 
   // NEW: Get score color
@@ -1239,7 +1265,20 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           </div>
         ) : latestEvaluation ? (
           <div>
-            {/* NEW: Extraction Warnings Banner */}
+            {/* Warning Banner: No documents/templates */}
+            {latestEvaluation.inputs.proposalDocuments === 0 && latestEvaluation.inputs.mandateTemplates === 0 && (
+              <div className="px-5 py-3 bg-amber-50 border-b border-amber-200">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">No documents or templates available</p>
+                    <p className="text-sm text-amber-700">Score is not meaningful yet. Upload proposal documents and configure mandate templates.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Extraction Warnings Banner */}
             {latestEvaluation.inputs.extractionWarnings && latestEvaluation.inputs.extractionWarnings.length > 0 && (
               <div className="px-5 py-3 bg-amber-50 border-b border-amber-200">
                 <div className="flex items-start gap-2">
@@ -1264,17 +1303,28 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             {/* Fit Score Header */}
             <div className="flex items-center justify-between p-5 border-b">
               <div className="flex items-center gap-4">
-                <div className={`flex items-center justify-center w-16 h-16 rounded-full ${getScoreBg(latestEvaluation.fitScore)}`}>
-                  <span className={`text-2xl font-bold ${getScoreColor(latestEvaluation.fitScore)}`}>
-                    {latestEvaluation.fitScore}
-                  </span>
-                </div>
+                {/* Show "—" when no docs/templates, otherwise show score */}
+                {latestEvaluation.inputs.proposalDocuments === 0 && latestEvaluation.inputs.mandateTemplates === 0 ? (
+                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100">
+                    <span className="text-2xl font-bold text-gray-400">—</span>
+                  </div>
+                ) : (
+                  <div className={`flex items-center justify-center w-16 h-16 rounded-full ${latestEvaluation.fitScore !== null ? getScoreBg(latestEvaluation.fitScore) : 'bg-gray-100'}`}>
+                    <span className={`text-2xl font-bold ${latestEvaluation.fitScore !== null ? getScoreColor(latestEvaluation.fitScore) : 'text-gray-400'}`}>
+                      {latestEvaluation.fitScore !== null ? latestEvaluation.fitScore : "—"}
+                    </span>
+                  </div>
+                )}
                 <div>
-                  <p className="text-lg font-semibold">Fit Score</p>
+                  <p className="text-lg font-semibold">
+                    {latestEvaluation.inputs.proposalDocuments === 0 && latestEvaluation.inputs.mandateTemplates === 0
+                      ? "Insufficient Inputs"
+                      : "Fit Score"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
                     Based on {latestEvaluation.inputs.proposalDocuments} document(s) and {latestEvaluation.inputs.mandateTemplates} template(s)
                   </p>
-                  {/* NEW: Confidence Badge */}
+                  {/* Confidence Badge */}
                   {latestEvaluation.confidence && (
                     <div className="flex items-center gap-2 mt-1">
                       <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1289,7 +1339,11 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                 <p>Evaluated {formatDate(latestEvaluation.evaluatedAt)}</p>
                 <p>by {latestEvaluation.evaluatedByEmail}</p>
                 <div className="flex items-center justify-end gap-2 mt-1">
-                  {latestEvaluation.engineType === "llm" ? (
+                  {latestEvaluation.engineType === "azure-openai" ? (
+                    <span className="inline-block px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                      Azure OpenAI: {latestEvaluation.model}
+                    </span>
+                  ) : latestEvaluation.engineType === "llm" ? (
                     <span className="inline-block px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded">
                       LLM: {latestEvaluation.model}
                     </span>
@@ -1379,7 +1433,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                       <TableHead>Evaluation ID</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-center">Fit Score</TableHead>
-                      <TableHead className="w-24"></TableHead>
+                      <TableHead className="w-40"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1402,20 +1456,34 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                           {formatDate(eval_.evaluatedAt)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <span className={`font-semibold ${getScoreColor(eval_.fitScore)}`}>
-                            {eval_.fitScore}
-                          </span>
+                          {eval_.fitScore !== null ? (
+                            <span className={`font-semibold ${getScoreColor(eval_.fitScore)}`}>
+                              {eval_.fitScore}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDownloadEvaluation(eval_.blobPath)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            JSON
-                          </Button>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewEvaluation(eval_.blobPath)}
+                              title="View details"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDownloadEvaluation(eval_.blobPath)}
+                              title="Download JSON"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
