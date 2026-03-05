@@ -21,8 +21,9 @@ interface RouteContext {
 }
 
 interface AssignRequestBody {
-  assignedUserId?: string;
+  assessorId?: string;
   queueId?: string;
+  dueDate?: string | null;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -48,45 +49,43 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(400, "Invalid JSON body");
     }
 
-    const { assignedUserId, queueId } = body;
+    const { assessorId, queueId, dueDate } = body;
 
-    if (assignedUserId && queueId) {
-      throw new AuthzHttpError(400, "Cannot assign to both user and queue");
+    if (!assessorId) {
+      throw new AuthzHttpError(400, "Assessor is required");
     }
 
-    if (!assignedUserId && !queueId) {
-      throw new AuthzHttpError(400, "Must assign to user or queue");
+    if (!queueId) {
+      throw new AuthzHttpError(400, "Queue is required");
     }
 
-    let assigneeName: string | undefined;
-
-    // Validate assignee belongs to same tenant
-    if (assignedUserId) {
-      if (!isUserInTenant(assignedUserId, tenantId)) {
-        throw new AuthzHttpError(400, "Assignee does not belong to this tenant");
-      }
-      const assignee = getUserById(assignedUserId);
-      assigneeName = assignee?.name;
+    // Validate assessor belongs to same tenant
+    if (!isUserInTenant(assessorId, tenantId)) {
+      throw new AuthzHttpError(400, "Assessor does not belong to this tenant");
     }
+    const assignee = getUserById(assessorId);
+    const assigneeName = assignee?.name;
 
-    // Validate queue belongs to same tenant
-    if (queueId) {
-      if (!isQueueInTenant(queueId, tenantId)) {
-        throw new AuthzHttpError(400, "Queue not found in tenant");
-      }
-      const queue = getQueueById(queueId);
-      if (!queue) {
-        throw new AuthzHttpError(400, "Queue not found");
-      }
+    // Validate queue belongs to same tenant and is active
+    if (!isQueueInTenant(queueId, tenantId)) {
+      throw new AuthzHttpError(400, "Queue not found in tenant");
+    }
+    const queue = getQueueById(queueId);
+    if (!queue) {
+      throw new AuthzHttpError(400, "Queue not found");
+    }
+    if (!queue.isActive) {
+      throw new AuthzHttpError(400, "Cannot assign to inactive queue");
     }
 
     // Update proposal assignment
     const result = assignProposal({
       tenantId,
       proposalId,
-      assignToUserId: assignedUserId,
+      assignToUserId: assessorId,
       assignToUserName: assigneeName,
       assignToQueueId: queueId,
+      dueDate,
     });
 
     if (!result.ok) {
@@ -96,8 +95,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Update the store assignment tracking
     setAssignment(
       proposalId,
-      assignedUserId || null,
-      queueId || null,
+      assessorId,
+      queueId,
       user.userId || ""
     );
 
@@ -110,9 +109,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       resourceType: "proposal",
       resourceId: proposalId,
       details: {
-        assignedToUserId: result.assignedToUserId,
-        assignedQueueId: result.assignedQueueId,
-        assigneeName,
+        assessorId: result.assignedToUserId,
+        queueId: result.assignedQueueId,
+        assessorName: assigneeName,
+        queueName: queue.name,
+        dueDate: result.dueDate,
       },
     });
 
@@ -120,8 +121,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ok: true,
       data: {
         proposalId,
-        assignedToUserId: result.assignedToUserId,
-        assignedToQueueId: result.assignedQueueId,
+        assessorId: result.assignedToUserId,
+        queueId: result.assignedQueueId,
+        dueDate: result.dueDate,
       },
     });
   } catch (error) {

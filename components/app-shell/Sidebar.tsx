@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   X,
+  ListChecks,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,6 +36,7 @@ const iconMap: Record<IconKey, LucideIcon> = {
   "clipboard-list": ClipboardList,
   "settings": Settings,
   "scroll-text": ScrollText,
+  "list-checks": ListChecks,
 };
 
 function filterItemsByPermissionAndRole(

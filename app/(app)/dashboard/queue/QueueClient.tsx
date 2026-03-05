@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   ArrowRight,
   Target,
@@ -37,7 +44,12 @@ function formatAmount(amount: number): string {
 export default function QueueClient({ proposals }: QueueClientProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [queueFilter, setQueueFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+
+  const uniqueQueues = Array.from(
+    new Set(proposals.filter(p => p.assignedQueueName).map(p => p.assignedQueueName))
+  );
 
   const filteredItems = proposals.filter((item) => {
     const matchesFilter =
@@ -45,11 +57,13 @@ export default function QueueClient({ proposals }: QueueClientProps) {
       (filter === "high" && item.priority === "High") ||
       (filter === "direct" && item.assignmentType === "direct") ||
       (filter === "queue" && item.assignmentType === "queue");
+    const matchesQueueFilter =
+      queueFilter === "all" || item.assignedQueueName === queueFilter;
     const matchesSearch =
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       item.applicant.toLowerCase().includes(search.toLowerCase()) ||
       item.id.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
+    return matchesFilter && matchesQueueFilter && matchesSearch;
   });
 
   const highPriorityCount = proposals.filter(q => q.priority === "High").length;
@@ -106,6 +120,21 @@ export default function QueueClient({ proposals }: QueueClientProps) {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            {uniqueQueues.length > 0 && (
+              <Select value={queueFilter} onValueChange={setQueueFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Filter by queue" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Queues</SelectItem>
+                  {uniqueQueues.map((queueName) => (
+                    <SelectItem key={queueName} value={queueName!}>
+                      {queueName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterKey)}>
               <TabsList>
                 <TabsTrigger value="all">
@@ -131,7 +160,7 @@ export default function QueueClient({ proposals }: QueueClientProps) {
             icon={CheckCircle}
             title="Queue is clear"
             description="No proposals match your current filters"
-            action={{ label: "Show all", onClick: () => { setFilter("all"); setSearch(""); } }}
+            action={{ label: "Show all", onClick: () => { setFilter("all"); setQueueFilter("all"); setSearch(""); } }}
           />
         ) : (
           <div className="divide-y">

@@ -98,9 +98,8 @@ interface Queue {
   id: string;
   name: string;
   description?: string;
+  isActive?: boolean;
 }
-
-type AssignMode = "user" | "queue";
 
 interface ProposalsClientProps {
   proposals: ProposalWithAssignment[];
@@ -111,23 +110,21 @@ interface ProposalsClientProps {
 
 interface AssignProposalParams {
   proposalId: string;
-  mode: AssignMode;
-  userId?: string;
-  queueId?: string;
+  assessorId: string;
+  queueId: string;
+  dueDate?: string | null;
 }
 
 async function assignProposal(
   params: AssignProposalParams
-): Promise<{ ok: boolean; error?: string; data?: { proposalId: string; assignedToUserId?: string; assignedToQueueId?: string } }> {
-  const { proposalId, mode, userId, queueId } = params;
+): Promise<{ ok: boolean; error?: string; data?: { proposalId: string; assessorId?: string; queueId?: string; dueDate?: string } }> {
+  const { proposalId, assessorId, queueId, dueDate } = params;
   try {
     const res = await fetch(`/api/tenant/proposals/${proposalId}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify(
-        mode === "user" ? { assignedUserId: userId } : { queueId }
-      ),
+      body: JSON.stringify({ assessorId, queueId, dueDate }),
     });
     const data = await res.json();
     return data;
@@ -170,17 +167,18 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
   const router = useRouter();
   const { toast } = useToast();
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [queueFilter, setQueueFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [, startTransition] = useTransition();
   
   // Assign modal state
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assigningProposal, setAssigningProposal] = useState<ProposalWithAssignment | null>(null);
-  const [assignMode, setAssignMode] = useState<AssignMode>("user");
   const [assessors, setAssessors] = useState<Assessor[]>([]);
   const [queues, setQueues] = useState<Queue[]>([]);
   const [selectedAssessorId, setSelectedAssessorId] = useState<string>("");
   const [selectedQueueId, setSelectedQueueId] = useState<string>("");
+  const [selectedDueDate, setSelectedDueDate] = useState<string>("");
   const [loadingData, setLoadingData] = useState(false);
   const [submittingAssignment, setSubmittingAssignment] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -200,7 +198,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
       setAssessors(assessorResult.data);
     }
     if (queueResult.ok && queueResult.data) {
-      setQueues(queueResult.data);
+      setQueues(queueResult.data.filter((q: Queue) => q.isActive !== false));
     }
     
     if (!assessorResult.ok && !queueResult.ok) {
@@ -214,7 +212,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
     setAssigningProposal(proposal);
     setSelectedAssessorId("");
     setSelectedQueueId("");
-    setAssignMode("user");
+    setSelectedDueDate("");
     setAssignError(null);
     setAssignModalOpen(true);
     await loadAssignmentData();
@@ -223,27 +221,25 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
   const handleAssignSubmit = async () => {
     if (!assigningProposal) return;
     
-    const selectedId = assignMode === "user" ? selectedAssessorId : selectedQueueId;
-    if (!selectedId) return;
+    if (!selectedAssessorId || !selectedQueueId) {
+      setAssignError("Both assessor and queue are required");
+      return;
+    }
     
     setSubmittingAssignment(true);
     setAssignError(null);
     
     const result = await assignProposal({
       proposalId: assigningProposal.id,
-      mode: assignMode,
-      userId: assignMode === "user" ? selectedAssessorId : undefined,
-      queueId: assignMode === "queue" ? selectedQueueId : undefined,
+      assessorId: selectedAssessorId,
+      queueId: selectedQueueId,
+      dueDate: selectedDueDate || null,
     });
     
     if (result.ok) {
-      if (assignMode === "user") {
-        const assessor = assessors.find(a => a.id === selectedAssessorId);
-        toast(`Assigned to ${assessor?.name || "assessor"}`);
-      } else {
-        const queue = queues.find(q => q.id === selectedQueueId);
-        toast(`Assigned to queue: ${queue?.name || "queue"}`);
-      }
+      const assessor = assessors.find(a => a.id === selectedAssessorId);
+      const queue = queues.find(q => q.id === selectedQueueId);
+      toast(`Assigned to ${assessor?.name || "assessor"} in ${queue?.name || "queue"}`);
       setAssignModalOpen(false);
       setAssigningProposal(null);
       startTransition(() => {
@@ -256,14 +252,17 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
     setSubmittingAssignment(false);
   };
 
+  const uniqueQueues = Array.from(new Set(proposals.filter(p => p.assignedQueueName).map(p => p.assignedQueueName)));
+
   const filteredProposals = proposals.filter((p) => {
     const statusKey = p.status.toLowerCase().replace(" ", "-");
     const matchesFilter = filter === "all" || statusKey === filter;
+    const matchesQueueFilter = queueFilter === "all" || p.assignedQueueName === queueFilter;
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.applicant.toLowerCase().includes(search.toLowerCase()) ||
       p.id.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
+    return matchesFilter && matchesQueueFilter && matchesSearch;
   });
 
   const counts = {
@@ -383,14 +382,31 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
               </TabsList>
             </Tabs>
 
-            <div className="relative w-full lg:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search proposals..."
-                className="pl-9"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+            <div className="flex items-center gap-2">
+              {uniqueQueues.length > 0 && (
+                <Select value={queueFilter} onValueChange={setQueueFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Filter by queue" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Queues</SelectItem>
+                    {uniqueQueues.map((queueName) => (
+                      <SelectItem key={queueName} value={queueName!}>
+                        {queueName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <div className="relative w-full lg:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search proposals..."
+                  className="pl-9"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -400,7 +416,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
             icon={FileText}
             title="No proposals found"
             description="Try adjusting your search or filter criteria"
-            action={{ label: "Clear filters", onClick: () => { setFilter("all"); setSearch(""); } }}
+            action={{ label: "Clear filters", onClick: () => { setFilter("all"); setQueueFilter("all"); setSearch(""); } }}
           />
         ) : (
           <Table>
@@ -412,6 +428,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden lg:table-cell">Assessor</TableHead>
+                <TableHead className="hidden lg:table-cell">Queue</TableHead>
                 <TableHead className="hidden sm:table-cell">Due</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
@@ -451,14 +468,19 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
                       </StatusBadge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      {proposal.assignmentType === "direct" && proposal.assignedToName ? (
+                      {proposal.assignedToName ? (
                         <div className="flex items-center gap-2">
                           <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
                             {proposal.assignedToName.split(" ").map(n => n[0]).join("")}
                           </div>
                           <span className="text-sm">{proposal.assignedToName}</span>
                         </div>
-                      ) : proposal.assignmentType === "queue" && proposal.assignedQueueName ? (
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {proposal.assignedQueueName ? (
                         <div className="flex items-center gap-2">
                           <div className="h-6 w-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                             <Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
@@ -550,7 +572,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
             <DialogDescription>
               {assigningProposal && (
                 <>
-                  Assign <span className="font-medium">{assigningProposal.name}</span> to an assessor or queue.
+                  Assign <span className="font-medium">{assigningProposal.name}</span> to an assessor and queue.
                 </>
               )}
             </DialogDescription>
@@ -565,87 +587,80 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
             ) : (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Assignment Type</label>
-                  <Tabs value={assignMode} onValueChange={(v) => setAssignMode(v as AssignMode)}>
-                    <TabsList className="w-full">
-                      <TabsTrigger value="user" className="flex-1">
-                        <User className="h-4 w-4 mr-2" />
-                        Assessor
-                      </TabsTrigger>
-                      <TabsTrigger value="queue" className="flex-1">
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Queue
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
+                  <label htmlFor="assessor-select" className="text-sm font-medium">
+                    Assessor <span className="text-destructive">*</span>
+                  </label>
+                  {assessors.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground border rounded-md">
+                      <User className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No assessors available</p>
+                    </div>
+                  ) : (
+                    <Select value={selectedAssessorId} onValueChange={setSelectedAssessorId}>
+                      <SelectTrigger id="assessor-select">
+                        <SelectValue placeholder="Choose an assessor..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {assessors.map((assessor) => (
+                          <SelectItem key={assessor.id} value={assessor.id}>
+                            <div className="flex items-center gap-2">
+                              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                                {assessor.name.split(" ").map(n => n[0]).join("")}
+                              </div>
+                              <div>
+                                <span className="font-medium">{assessor.name}</span>
+                                <span className="text-muted-foreground ml-2 text-xs">{assessor.email}</span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
-                {assignMode === "user" && (
-                  <div className="space-y-2">
-                    <label htmlFor="assessor-select" className="text-sm font-medium">
-                      Select Assessor
-                    </label>
-                    {assessors.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground border rounded-md">
-                        <User className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No assessors available</p>
-                      </div>
-                    ) : (
-                      <Select value={selectedAssessorId} onValueChange={setSelectedAssessorId}>
-                        <SelectTrigger id="assessor-select">
-                          <SelectValue placeholder="Choose an assessor..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {assessors.map((assessor) => (
-                            <SelectItem key={assessor.id} value={assessor.id}>
-                              <div className="flex items-center gap-2">
-                                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-                                  {assessor.name.split(" ").map(n => n[0]).join("")}
-                                </div>
-                                <div>
-                                  <span className="font-medium">{assessor.name}</span>
-                                  <span className="text-muted-foreground ml-2 text-xs">{assessor.email}</span>
-                                </div>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label htmlFor="queue-select" className="text-sm font-medium">
+                    Queue <span className="text-destructive">*</span>
+                  </label>
+                  {queues.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground border rounded-md">
+                      <Users className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No queues available</p>
+                    </div>
+                  ) : (
+                    <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
+                      <SelectTrigger id="queue-select">
+                        <SelectValue placeholder="Choose a queue..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {queues.map((queue) => (
+                          <SelectItem key={queue.id} value={queue.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{queue.name}</span>
+                              {queue.description && (
+                                <span className="text-muted-foreground text-xs">{queue.description}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
 
-                {assignMode === "queue" && (
-                  <div className="space-y-2">
-                    <label htmlFor="queue-select" className="text-sm font-medium">
-                      Select Queue
-                    </label>
-                    {queues.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground border rounded-md">
-                        <UserPlus className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No queues available</p>
-                      </div>
-                    ) : (
-                      <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
-                        <SelectTrigger id="queue-select">
-                          <SelectValue placeholder="Choose a queue..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {queues.map((queue) => (
-                            <SelectItem key={queue.id} value={queue.id}>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{queue.name}</span>
-                                {queue.description && (
-                                  <span className="text-muted-foreground text-xs">{queue.description}</span>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label htmlFor="due-date" className="text-sm font-medium">
+                    Due Date (optional)
+                  </label>
+                  <input
+                    id="due-date"
+                    type="date"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={selectedDueDate}
+                    onChange={(e) => setSelectedDueDate(e.target.value)}
+                  />
+                </div>
 
                 {assignError && (
                   <Alert variant="destructive">
@@ -668,7 +683,8 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
             <Button
               onClick={handleAssignSubmit}
               disabled={
-                (assignMode === "user" ? !selectedAssessorId : !selectedQueueId) ||
+                !selectedAssessorId ||
+                !selectedQueueId ||
                 submittingAssignment ||
                 loadingData
               }

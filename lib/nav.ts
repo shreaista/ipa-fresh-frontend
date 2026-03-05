@@ -13,7 +13,8 @@ export type IconKey =
   | "file-text"
   | "clipboard-list"
   | "settings"
-  | "scroll-text";
+  | "scroll-text"
+  | "list-checks";
 
 export interface NavItem {
   key: string;
@@ -44,6 +45,7 @@ const SAAS_ADMIN_TENANT: NavItem[] = [
   { key: "funds", label: "Funds", href: "/dashboard/funds", iconKey: "wallet", roles: ["tenant_admin", "saas_admin"] },
   { key: "mandates", label: "Mandate Templates", href: "/dashboard/funds/mandates", iconKey: "scroll-text", permissionKey: "fund:mandate:read", roles: ["tenant_admin", "saas_admin"] },
   { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
+  { key: "queues", label: "Queues", href: "/dashboard/queues", iconKey: "list-checks", permissionKey: "queue:manage", roles: ["tenant_admin", "saas_admin"] },
   { key: "users", label: "Users", href: "/dashboard/users", iconKey: "users", permissionKey: "user:read" },
   { key: "subscriptions", label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card", roles: ["saas_admin"] },
   { key: "costs", label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permissionKey: "costs:read" },
@@ -58,6 +60,7 @@ export const NAV_BY_ROLE: Record<string, NavItem[]> = {
     { key: "funds", label: "Funds", href: "/dashboard/funds", iconKey: "wallet", roles: ["tenant_admin", "saas_admin"] },
     { key: "mandates", label: "Mandate Templates", href: "/dashboard/funds/mandates", iconKey: "scroll-text", permissionKey: "fund:mandate:read", roles: ["tenant_admin", "saas_admin"] },
     { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
+    { key: "queues", label: "Queues", href: "/dashboard/queues", iconKey: "list-checks", permissionKey: "queue:manage", roles: ["tenant_admin", "saas_admin"] },
     { key: "users", label: "Users", href: "/dashboard/users", iconKey: "users", permissionKey: "user:read" },
     { key: "costs", label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permissionKey: "costs:read" },
     { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },

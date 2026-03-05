@@ -20,6 +20,9 @@ export const PERMISSIONS = {
   PROPOSAL_CREATE: "proposal:create",
   PROPOSAL_ASSIGN: "proposal:assign",
 
+  // Queue management
+  QUEUE_MANAGE: "queue:manage",
+
   // Fund mandate management
   FUND_MANDATE_UPLOAD: "fund:mandate:upload",
   FUND_MANDATE_READ: "fund:mandate:read",
@@ -67,6 +70,7 @@ export const ROLE_PERMISSION_MAP: Record<RoleKey, readonly PermissionKey[]> = {
     PERMISSIONS.PROPOSAL_READ,
     PERMISSIONS.PROPOSAL_CREATE,
     PERMISSIONS.PROPOSAL_ASSIGN,
+    PERMISSIONS.QUEUE_MANAGE,
     PERMISSIONS.FUND_MANDATE_UPLOAD,
     PERMISSIONS.FUND_MANDATE_READ,
     // NEW: Proposal document permissions
@@ -86,6 +90,7 @@ export const ROLE_PERMISSION_MAP: Record<RoleKey, readonly PermissionKey[]> = {
     PERMISSIONS.PROPOSAL_READ,
     PERMISSIONS.PROPOSAL_CREATE,
     PERMISSIONS.PROPOSAL_ASSIGN,
+    PERMISSIONS.QUEUE_MANAGE,
     PERMISSIONS.FUND_MANDATE_UPLOAD,
     PERMISSIONS.FUND_MANDATE_READ,
     // NEW: Proposal document permissions

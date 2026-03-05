@@ -6,7 +6,6 @@ import {
   getProposalQueueId,
   getQueueById,
   assignProposalToQueue as assignToQueue,
-  removeProposalFromQueue,
 } from "./queues";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,9 +342,10 @@ export function listProposalsForAssessorAccess(
 export interface AssignProposalParams {
   tenantId: string;
   proposalId: string;
-  assignToUserId?: string;
+  assignToUserId: string;
   assignToUserName?: string;
-  assignToQueueId?: string;
+  assignToQueueId: string;
+  dueDate?: string | null;
 }
 
 export interface AssignProposalResult {
@@ -353,10 +353,11 @@ export interface AssignProposalResult {
   error?: string;
   assignedToUserId?: string | null;
   assignedQueueId?: string | null;
+  dueDate?: string | null;
 }
 
 export function assignProposal(params: AssignProposalParams): AssignProposalResult {
-  const { tenantId, proposalId, assignToUserId, assignToUserName, assignToQueueId } = params;
+  const { tenantId, proposalId, assignToUserId, assignToUserName, assignToQueueId, dueDate } = params;
 
   const proposal = proposals.find((p) => p.id === proposalId);
   if (!proposal) {
@@ -367,46 +368,40 @@ export function assignProposal(params: AssignProposalParams): AssignProposalResu
     return { ok: false, error: "Proposal not in tenant" };
   }
 
-  if (assignToUserId && assignToQueueId) {
-    return { ok: false, error: "Cannot assign to both user and queue" };
+  if (!assignToUserId) {
+    return { ok: false, error: "Assessor is required" };
   }
 
-  if (!assignToUserId && !assignToQueueId) {
-    return { ok: false, error: "Must assign to user or queue" };
+  if (!assignToQueueId) {
+    return { ok: false, error: "Queue is required" };
   }
 
-  if (assignToUserId) {
-    proposal.assignedToUserId = assignToUserId;
-    proposal.assignedToName = assignToUserName ?? assignToUserId;
-    if (proposal.status === "New") {
-      proposal.status = "Assigned";
-    }
-    removeProposalFromQueue(proposalId);
-    return {
-      ok: true,
-      assignedToUserId: assignToUserId,
-      assignedQueueId: null,
-    };
+  // Assign to queue
+  const queueResult = assignToQueue({ tenantId, proposalId, queueId: assignToQueueId });
+  if (!queueResult.ok) {
+    return { ok: false, error: queueResult.error };
   }
 
-  if (assignToQueueId) {
-    const queueResult = assignToQueue({ tenantId, proposalId, queueId: assignToQueueId });
-    if (!queueResult.ok) {
-      return { ok: false, error: queueResult.error };
-    }
-    proposal.assignedToUserId = null;
-    proposal.assignedToName = null;
-    if (proposal.status === "New") {
-      proposal.status = "Assigned";
-    }
-    return {
-      ok: true,
-      assignedToUserId: null,
-      assignedQueueId: assignToQueueId,
-    };
+  // Assign to user
+  proposal.assignedToUserId = assignToUserId;
+  proposal.assignedToName = assignToUserName ?? assignToUserId;
+  
+  // Set due date
+  if (dueDate !== undefined) {
+    proposal.dueDate = dueDate;
   }
 
-  return { ok: false, error: "Invalid assignment" };
+  // Update status
+  if (proposal.status === "New") {
+    proposal.status = "Assigned";
+  }
+
+  return {
+    ok: true,
+    assignedToUserId: assignToUserId,
+    assignedQueueId: assignToQueueId,
+    dueDate: proposal.dueDate,
+  };
 }
 
 export function getProposalById(proposalId: string): Proposal | undefined {
