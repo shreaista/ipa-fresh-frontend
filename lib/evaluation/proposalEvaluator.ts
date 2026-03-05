@@ -15,7 +15,6 @@ import {
   listBlobs,
   downloadBlob,
   getDefaultContainer,
-  generateTimestamp,
   parseTimestampFromPath,
 } from "@/lib/storage/azureBlob";
 import { listProposalDocuments } from "@/lib/storage/proposalDocuments";
@@ -70,9 +69,13 @@ export interface RunEvaluationResult {
 // Path Utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildEvaluationPath(tenantId: string, proposalId: string): string {
-  const timestamp = generateTimestamp();
-  return `tenants/${tenantId}/proposals/${proposalId}/evaluations/${timestamp}/evaluation.json`;
+function buildEvaluationPath(tenantId: string, proposalId: string, evaluationId: string): string {
+  return `tenants/${tenantId}/proposals/${proposalId}/evaluations/${evaluationId}/evaluation.json`;
+}
+
+// Generate a unique evaluation ID using timestamp format: YYYYMMDDTHHmmssZ
+function generateEvaluationId(): string {
+  return new Date().toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z";
 }
 
 function getEvaluationsPrefix(tenantId: string, proposalId: string): string {
@@ -103,7 +106,8 @@ export async function uploadEvaluationJson(
   report: EvaluationReport
 ): Promise<string> {
   const container = getDefaultContainer();
-  const blobPath = buildEvaluationPath(tenantId, proposalId);
+  // Use the evaluationId from the report to ensure folder name matches report ID
+  const blobPath = buildEvaluationPath(tenantId, proposalId, report.evaluationId);
 
   const jsonContent = JSON.stringify(report, null, 2);
   const buffer = Buffer.from(jsonContent, "utf-8");
@@ -133,15 +137,15 @@ export async function listEvaluations(
   for (const blob of blobs) {
     if (!blob.path.endsWith("/evaluation.json")) continue;
 
-    const timestamp = extractTimestampFromPath(blob.path);
+    const extractedId = extractTimestampFromPath(blob.path);
     const parsedDate = parseTimestampFromPath(blob.path);
 
     const metadata: EvaluationMetadata = {
       blobPath: blob.path,
-      evaluationId: timestamp,
+      evaluationId: extractedId,
       evaluatedAt: parsedDate?.toISOString() || blob.lastModified,
       fitScore: null,
-      timestamp,
+      timestamp: extractedId,
     };
 
     if (loadFullData) {
@@ -149,10 +153,15 @@ export async function listEvaluations(
       if (result) {
         try {
           const report = JSON.parse(result.buffer.toString("utf-8")) as EvaluationReport;
+          // Use evaluationId from the report if available
+          if (report.evaluationId) {
+            metadata.evaluationId = report.evaluationId;
+          }
           metadata.fitScore = report.fitScore;
           metadata.confidence = report.confidence;
           metadata.model = report.model;
           metadata.engineType = report.engineType;
+          metadata.evaluatedAt = report.evaluatedAt || metadata.evaluatedAt;
           metadata.inputs = {
             proposalDocuments: report.inputs.proposalDocuments,
             mandateTemplates: report.inputs.mandateTemplates,
@@ -287,7 +296,8 @@ export async function runEvaluation(
     }
   }
 
-  const timestamp = generateTimestamp();
+  // Generate unique evaluation ID - this will be used as folder name and in report
+  const evaluationId = generateEvaluationId();
   let report: EvaluationReport;
 
   // Check if any LLM provider is configured (Azure OpenAI or standard OpenAI)
@@ -327,7 +337,7 @@ export async function runEvaluation(
       const engineType = llmResult.provider === "azure-openai" ? "azure-openai" : "llm";
 
       report = {
-        evaluationId: timestamp,
+        evaluationId,
         proposalId,
         tenantId,
         evaluatedAt: new Date().toISOString(),
@@ -365,7 +375,7 @@ export async function runEvaluation(
       );
 
       report = {
-        evaluationId: timestamp,
+        evaluationId,
         proposalId,
         tenantId,
         evaluatedAt: new Date().toISOString(),
@@ -410,7 +420,7 @@ export async function runEvaluation(
     );
 
     report = {
-      evaluationId: timestamp,
+      evaluationId,
       proposalId,
       tenantId,
       evaluatedAt: new Date().toISOString(),
