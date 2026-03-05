@@ -20,7 +20,11 @@ import {
 } from "@/lib/storage/azureBlob";
 import { listProposalDocuments } from "@/lib/storage/proposalDocuments";
 import { listFundMandates, type FundMandateBlob } from "@/lib/storage/azure";
-import { runEvaluationLLM, isOpenAIConfigured } from "@/lib/llm/openaiClient";
+import {
+  runEvaluationWithProvider,
+  isLLMConfigured,
+  getLLMProvider,
+} from "@/lib/llm/openaiClient";
 import {
   extractContentForEvaluation,
   type BlobInfo,
@@ -238,9 +242,12 @@ export async function runEvaluation(
   const timestamp = generateTimestamp();
   let report: EvaluationReport;
 
-  // NEW: Check if OpenAI is configured
-  if (isOpenAIConfigured()) {
-    // NEW: Extract text content from documents
+  // Check if any LLM provider is configured (Azure OpenAI or standard OpenAI)
+  if (isLLMConfigured()) {
+    const provider = getLLMProvider();
+    console.log(`[proposalEvaluator] Using LLM provider: ${provider}`);
+
+    // Extract text content from documents
     const mandateBlobs: BlobInfo[] = mandateTemplates.map((t) => ({
       blobPath: t.blobName,
       contentType: t.contentType,
@@ -255,8 +262,8 @@ export async function runEvaluation(
 
     const extractedContent = await extractContentForEvaluation(mandateBlobs, proposalBlobs);
 
-    // NEW: Run LLM evaluation
-    const llmResult = await runEvaluationLLM({
+    // Run LLM evaluation (routes to Azure OpenAI or standard OpenAI)
+    const llmResult = await runEvaluationWithProvider({
       mandateText: extractedContent.mandateText,
       proposalText: extractedContent.proposalText,
       context: {
@@ -267,7 +274,10 @@ export async function runEvaluation(
     });
 
     if (llmResult.success && llmResult.response) {
-      // NEW: Build report from LLM response
+      // Build report from LLM response
+      // engineType is "azure-openai" when using Azure, "llm" for standard OpenAI
+      const engineType = llmResult.provider === "azure-openai" ? "azure-openai" : "llm";
+
       report = {
         evaluationId: timestamp,
         proposalId,
@@ -294,10 +304,10 @@ export async function runEvaluation(
 
         model: llmResult.model,
         version: "2.0.0",
-        engineType: "llm",
+        engineType,
       };
     } else {
-      // NEW: LLM failed, fall back to stub with error info
+      // LLM failed, fall back to stub with error info in extractionWarnings
       console.error("[proposalEvaluator] LLM evaluation failed:", llmResult.error);
       
       const stubResult = generateStubEvaluation(
@@ -321,7 +331,7 @@ export async function runEvaluation(
           totalCharactersProcessed: extractedContent.totalCharacters,
           extractionWarnings: [
             ...extractedContent.extractionWarnings,
-            `LLM evaluation failed: ${llmResult.error}`,
+            `LLM evaluation failed (${llmResult.provider}): ${llmResult.error}`,
           ],
         },
 
@@ -333,8 +343,8 @@ export async function runEvaluation(
       };
     }
   } else {
-    // NEW: OpenAI not configured, use stub
-    console.warn("[proposalEvaluator] OpenAI not configured, using stub evaluation");
+    // No LLM provider configured, use stub
+    console.warn("[proposalEvaluator] No LLM provider configured, using stub evaluation");
 
     const stubResult = generateStubEvaluation(
       proposalDocs.length,
@@ -355,7 +365,7 @@ export async function runEvaluation(
         mandateTemplates: mandateTemplates.length,
         mandateKey,
         totalCharactersProcessed: 0,
-        extractionWarnings: ["OpenAI API key not configured - using stub evaluation"],
+        extractionWarnings: ["No LLM provider configured (set AZURE_OPENAI_* or OPENAI_API_KEY) - using stub evaluation"],
       },
 
       ...stubResult,

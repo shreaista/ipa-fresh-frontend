@@ -1,57 +1,67 @@
 import "server-only";
 
-// OpenAI / Azure OpenAI Client for Proposal Evaluation
+// Azure OpenAI Client for Proposal Evaluation
 //
-// Priority:
-// 1. If AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_DEPLOYMENT are set -> use Azure OpenAI
-// 2. If OPENAI_API_KEY is set -> use standard OpenAI
-// 3. Otherwise -> fallback to stub
-//
-// Uses Chat Completions API to evaluate proposals against fund mandates.
-// Validates responses with Zod schema and retries once if JSON is invalid.
+// Uses Azure OpenAI Chat Completions API.
+// Requires environment variables:
+// - AZURE_OPENAI_ENDPOINT (e.g., https://your-resource.openai.azure.com)
+// - AZURE_OPENAI_KEY
+// - AZURE_OPENAI_DEPLOYMENT (model deployment name)
 
 import {
   type LLMEvaluationResponse,
   validateLLMResponse,
 } from "@/lib/evaluation/types";
 
-import {
-  isAzureOpenAIConfigured,
-  getAzureOpenAIDeploymentName,
-  runAzureEvaluationLLM,
-  type RunAzureEvaluationResult,
-} from "./azureOpenAIClient";
-
-// Re-export Azure functions for external use
-export { isAzureOpenAIConfigured, getAzureOpenAIDeploymentName };
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: Get OpenAI configuration from environment
-function getOpenAIConfig(): { apiKey: string; model: string; baseUrl: string } {
-  const apiKey = process.env.OPENAI_API_KEY;
-  
-  if (!apiKey) {
+export interface AzureOpenAIConfig {
+  endpoint: string;
+  apiKey: string;
+  deploymentName: string;
+  apiVersion: string;
+}
+
+function getAzureOpenAIConfig(): AzureOpenAIConfig {
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const apiKey = process.env.AZURE_OPENAI_KEY;
+  const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT;
+
+  if (!endpoint || !apiKey || !deploymentName) {
     throw new Error(
-      "OPENAI_API_KEY environment variable is required. " +
-      "Please set it in your .env.local file."
+      "Azure OpenAI requires AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, and AZURE_OPENAI_DEPLOYMENT environment variables."
     );
   }
 
   return {
+    endpoint: endpoint.replace(/\/$/, ""), // Remove trailing slash if present
     apiKey,
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+    deploymentName,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION || "2024-08-01-preview",
   };
+}
+
+// Check if Azure OpenAI is configured
+export function isAzureOpenAIConfigured(): boolean {
+  return !!(
+    process.env.AZURE_OPENAI_ENDPOINT &&
+    process.env.AZURE_OPENAI_KEY &&
+    process.env.AZURE_OPENAI_DEPLOYMENT
+  );
+}
+
+// Get deployment name for model field in reports
+export function getAzureOpenAIDeploymentName(): string {
+  return process.env.AZURE_OPENAI_DEPLOYMENT || "unknown";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface RunEvaluationLLMParams {
+export interface RunAzureEvaluationParams {
   mandateText: string;
   proposalText: string;
   context: {
@@ -61,7 +71,7 @@ export interface RunEvaluationLLMParams {
   };
 }
 
-export interface RunEvaluationLLMResult {
+export interface RunAzureEvaluationResult {
   success: boolean;
   response?: LLMEvaluationResponse;
   model: string;
@@ -72,7 +82,6 @@ export interface RunEvaluationLLMResult {
 // Prompts
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: System prompt for evaluation
 const SYSTEM_PROMPT = `You are an expert investment analyst reviewing proposals against fund mandates.
 
 Your task is to evaluate how well a proposal fits a fund's investment mandate and provide a structured assessment.
@@ -86,7 +95,6 @@ Guidelines:
 
 You MUST respond with valid JSON only, no additional text.`;
 
-// NEW: Build user prompt with content and schema
 function buildUserPrompt(
   mandateText: string,
   proposalText: string,
@@ -113,7 +121,6 @@ Respond with a JSON object matching this exact schema:
 Respond with ONLY the JSON object, no markdown formatting or additional text.`;
 }
 
-// NEW: Retry prompt when JSON is invalid
 function buildRetryPrompt(originalResponse: string, error: string): string {
   return `Your previous response was not valid JSON. Error: ${error}
 
@@ -135,22 +142,27 @@ Respond with ONLY valid JSON, no additional text or markdown.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OpenAI API Call
+// Azure OpenAI API Call
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: Call OpenAI Chat Completions API
-async function callOpenAI(
+async function callAzureOpenAI(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-  config: { apiKey: string; model: string; baseUrl: string }
+  config: AzureOpenAIConfig
 ): Promise<{ content: string; model: string }> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  // Azure OpenAI endpoint format:
+  // {endpoint}/openai/deployments/{deployment-id}/chat/completions?api-version={api-version}
+  const url = `${config.endpoint}/openai/deployments/${config.deploymentName}/chat/completions?api-version=${config.apiVersion}`;
+
+  // Safe logging - never log the API key
+  console.log(`[azureOpenAIClient] Calling Azure OpenAI deployment: ${config.deploymentName}`);
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${config.apiKey}`,
+      "api-key": config.apiKey,
     },
     body: JSON.stringify({
-      model: config.model,
       messages,
       temperature: 0.3,
       max_tokens: 2000,
@@ -159,38 +171,40 @@ async function callOpenAI(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
+    // Safe logging - don't expose full error which might contain sensitive info
+    console.error(`[azureOpenAIClient] API error: status=${response.status}`);
+    throw new Error(`Azure OpenAI API error (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
-  
+
   if (!data.choices?.[0]?.message?.content) {
-    throw new Error("Invalid OpenAI response: no content in response");
+    throw new Error("Invalid Azure OpenAI response: no content in response");
   }
 
   return {
     content: data.choices[0].message.content,
-    model: data.model || config.model,
+    model: config.deploymentName,
   };
 }
 
-// NEW: Parse JSON from LLM response (handles markdown code blocks)
+// Parse JSON from LLM response (handles markdown code blocks)
 function parseJSONResponse(content: string): unknown {
   let jsonStr = content.trim();
-  
+
   // Remove markdown code blocks if present
   if (jsonStr.startsWith("```json")) {
     jsonStr = jsonStr.slice(7);
   } else if (jsonStr.startsWith("```")) {
     jsonStr = jsonStr.slice(3);
   }
-  
+
   if (jsonStr.endsWith("```")) {
     jsonStr = jsonStr.slice(0, -3);
   }
-  
+
   jsonStr = jsonStr.trim();
-  
+
   return JSON.parse(jsonStr);
 }
 
@@ -198,14 +212,13 @@ function parseJSONResponse(content: string): unknown {
 // Main Evaluation Function
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: Run LLM evaluation with retry on invalid JSON
-export async function runEvaluationLLM(
-  params: RunEvaluationLLMParams
-): Promise<RunEvaluationLLMResult> {
+export async function runAzureEvaluationLLM(
+  params: RunAzureEvaluationParams
+): Promise<RunAzureEvaluationResult> {
   const { mandateText, proposalText, context } = params;
 
   try {
-    const config = getOpenAIConfig();
+    const config = getAzureOpenAIConfig();
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: SYSTEM_PROMPT },
@@ -213,13 +226,14 @@ export async function runEvaluationLLM(
     ];
 
     // First attempt
-    const firstResponse = await callOpenAI(messages, config);
-    
+    const firstResponse = await callAzureOpenAI(messages, config);
+
     try {
       const parsed = parseJSONResponse(firstResponse.content);
       const validation = validateLLMResponse(parsed);
-      
+
       if (validation.success && validation.data) {
+        console.log("[azureOpenAIClient] Evaluation successful");
         return {
           success: true,
           response: validation.data,
@@ -228,16 +242,17 @@ export async function runEvaluationLLM(
       }
 
       // Invalid schema, retry with fix prompt
-      console.warn("[openaiClient] First response validation failed:", validation.error);
-      
+      console.warn("[azureOpenAIClient] First response validation failed:", validation.error);
+
       messages.push({ role: "assistant", content: firstResponse.content });
       messages.push({ role: "user", content: buildRetryPrompt(firstResponse.content, validation.error || "Invalid schema") });
 
-      const retryResponse = await callOpenAI(messages, config);
+      const retryResponse = await callAzureOpenAI(messages, config);
       const retryParsed = parseJSONResponse(retryResponse.content);
       const retryValidation = validateLLMResponse(retryParsed);
 
       if (retryValidation.success && retryValidation.data) {
+        console.log("[azureOpenAIClient] Evaluation successful after retry");
         return {
           success: true,
           response: retryValidation.data,
@@ -248,12 +263,12 @@ export async function runEvaluationLLM(
       return {
         success: false,
         model: retryResponse.model,
-        error: `LLM response validation failed after retry: ${retryValidation.error}`,
+        error: `Azure OpenAI response validation failed after retry: ${retryValidation.error}`,
       };
 
     } catch (parseError) {
       // JSON parse failed, retry with fix prompt
-      console.warn("[openaiClient] JSON parse failed:", parseError);
+      console.warn("[azureOpenAIClient] JSON parse failed:", parseError);
 
       messages.push({ role: "assistant", content: firstResponse.content });
       messages.push({
@@ -264,13 +279,14 @@ export async function runEvaluationLLM(
         ),
       });
 
-      const retryResponse = await callOpenAI(messages, config);
-      
+      const retryResponse = await callAzureOpenAI(messages, config);
+
       try {
         const retryParsed = parseJSONResponse(retryResponse.content);
         const retryValidation = validateLLMResponse(retryParsed);
 
         if (retryValidation.success && retryValidation.data) {
+          console.log("[azureOpenAIClient] Evaluation successful after retry");
           return {
             success: true,
             response: retryValidation.data,
@@ -281,71 +297,25 @@ export async function runEvaluationLLM(
         return {
           success: false,
           model: retryResponse.model,
-          error: `LLM response validation failed after retry: ${retryValidation.error}`,
+          error: `Azure OpenAI response validation failed after retry: ${retryValidation.error}`,
         };
       } catch (retryParseError) {
         return {
           success: false,
-          model: config.model,
-          error: `Failed to parse LLM response after retry: ${retryParseError instanceof Error ? retryParseError.message : "Unknown error"}`,
+          model: config.deploymentName,
+          error: `Failed to parse Azure OpenAI response after retry: ${retryParseError instanceof Error ? retryParseError.message : "Unknown error"}`,
         };
       }
     }
 
   } catch (error) {
-    console.error("[openaiClient] LLM evaluation failed:", error);
+    // Safe error logging - don't expose sensitive details
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("[azureOpenAIClient] Azure OpenAI evaluation failed:", errorMessage);
     return {
       success: false,
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      error: error instanceof Error ? error.message : "Unknown error",
+      model: process.env.AZURE_OPENAI_DEPLOYMENT || "azure-openai",
+      error: errorMessage,
     };
   }
-}
-
-// Check if standard OpenAI is configured
-export function isOpenAIConfigured(): boolean {
-  return !!process.env.OPENAI_API_KEY;
-}
-
-// Check if any LLM provider is configured (Azure OpenAI takes priority)
-export function isLLMConfigured(): boolean {
-  return isAzureOpenAIConfigured() || isOpenAIConfigured();
-}
-
-// Get the active LLM provider type
-export function getLLMProvider(): "azure-openai" | "openai" | "stub" {
-  if (isAzureOpenAIConfigured()) return "azure-openai";
-  if (isOpenAIConfigured()) return "openai";
-  return "stub";
-}
-
-// Get the model name for the active provider
-export function getActiveModelName(): string {
-  if (isAzureOpenAIConfigured()) {
-    return getAzureOpenAIDeploymentName();
-  }
-  return process.env.OPENAI_MODEL || "gpt-4o-mini";
-}
-
-// Unified evaluation function that routes to the appropriate provider
-export async function runEvaluationWithProvider(
-  params: RunEvaluationLLMParams
-): Promise<RunEvaluationLLMResult & { provider: "azure-openai" | "openai" }> {
-  // Azure OpenAI takes priority
-  if (isAzureOpenAIConfigured()) {
-    console.log("[openaiClient] Using Azure OpenAI for evaluation");
-    const result: RunAzureEvaluationResult = await runAzureEvaluationLLM(params);
-    return {
-      ...result,
-      provider: "azure-openai",
-    };
-  }
-
-  // Fall back to standard OpenAI
-  console.log("[openaiClient] Using standard OpenAI for evaluation");
-  const result = await runEvaluationLLM(params);
-  return {
-    ...result,
-    provider: "openai",
-  };
 }

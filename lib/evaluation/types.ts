@@ -47,7 +47,7 @@ export const EvaluationReportSchema = z.object({
 
   model: z.string(),
   version: z.string(),
-  engineType: z.enum(["stub", "llm"]),
+  engineType: z.enum(["stub", "llm", "azure-openai"]),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
