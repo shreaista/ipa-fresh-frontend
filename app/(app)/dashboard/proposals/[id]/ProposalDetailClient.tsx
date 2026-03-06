@@ -113,6 +113,9 @@ interface EvaluationReport {
     mandateTemplates: number;
     totalCharactersProcessed?: number;
     extractionWarnings?: string[];
+    processedDocumentsCount?: number;
+    truncatedDocumentsCount?: number;
+    skippedDocumentsCount?: number;
   };
   engineType: "stub" | "llm" | "azure-openai";
 }
@@ -1358,7 +1361,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               <div className="px-5 py-3 bg-amber-50 border-b border-amber-200">
                 <div className="flex items-start gap-2">
                   <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                  <div>
+                  <div className="flex-1">
                     <p className="text-sm font-medium text-amber-800">Text Extraction Warnings</p>
                     <ul className="mt-1 text-sm text-amber-700">
                       {displayedEvaluation.inputs.extractionWarnings.slice(0, 3).map((warning, i) => (
@@ -1370,6 +1373,31 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                         </li>
                       )}
                     </ul>
+                    {/* Document Processing Stats */}
+                    {(displayedEvaluation.inputs.processedDocumentsCount !== undefined ||
+                      displayedEvaluation.inputs.truncatedDocumentsCount !== undefined ||
+                      displayedEvaluation.inputs.skippedDocumentsCount !== undefined) && (
+                      <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                        {displayedEvaluation.inputs.processedDocumentsCount !== undefined &&
+                          displayedEvaluation.inputs.processedDocumentsCount > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                              {displayedEvaluation.inputs.processedDocumentsCount} processed
+                            </span>
+                          )}
+                        {displayedEvaluation.inputs.truncatedDocumentsCount !== undefined &&
+                          displayedEvaluation.inputs.truncatedDocumentsCount > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-100 text-amber-700">
+                              {displayedEvaluation.inputs.truncatedDocumentsCount} truncated
+                            </span>
+                          )}
+                        {displayedEvaluation.inputs.skippedDocumentsCount !== undefined &&
+                          displayedEvaluation.inputs.skippedDocumentsCount > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-700">
+                              {displayedEvaluation.inputs.skippedDocumentsCount} skipped
+                            </span>
+                          )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

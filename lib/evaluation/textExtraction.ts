@@ -12,7 +12,6 @@ import { downloadBlob, getDefaultContainer } from "@/lib/storage/azureBlob";
 import {
   TEXT_EXTRACTABLE_TYPES,
   BINARY_EXTRACTABLE_TYPES,
-  MAX_CHARS_PER_DOC,
   MAX_TOTAL_CHARS,
 } from "./types";
 import { extractDocxText, extractPdfText } from "@/lib/textExtractor";
@@ -25,8 +24,15 @@ export interface DocumentTextResult {
   filename: string;
   blobPath: string;
   text: string;
+  uploadedAt: string;
   isPlaceholder: boolean;
   warning?: string;
+}
+
+export interface DocumentProcessingStats {
+  processedDocumentsCount: number;
+  truncatedDocumentsCount: number;
+  skippedDocumentsCount: number;
 }
 
 export interface ExtractedContent {
@@ -34,6 +40,7 @@ export interface ExtractedContent {
   proposalText: string;
   totalCharacters: number;
   extractionWarnings: string[];
+  documentStats: DocumentProcessingStats;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,7 +50,8 @@ export interface ExtractedContent {
 // Extract text from a single blob
 async function extractTextFromBlob(
   blobPath: string,
-  contentType: string
+  contentType: string,
+  uploadedAt: string
 ): Promise<DocumentTextResult> {
   const filename = blobPath.split("/").pop() || blobPath;
   const container = getDefaultContainer();
@@ -58,26 +66,21 @@ async function extractTextFromBlob(
           filename,
           blobPath,
           text: `[File: ${filename}] (download failed)`,
+          uploadedAt,
           isPlaceholder: true,
           warning: `Failed to download ${filename}`,
         };
       }
 
-      // Decode as UTF-8 text
+      // Decode as UTF-8 text - don't truncate here, let inputPreparation handle it
       const text = result.buffer.toString("utf-8");
-      
-      // Truncate if too long
-      const truncatedText = text.substring(0, MAX_CHARS_PER_DOC);
-      const wasTruncated = text.length > MAX_CHARS_PER_DOC;
 
       return {
         filename,
         blobPath,
-        text: truncatedText,
+        text,
+        uploadedAt,
         isPlaceholder: false,
-        warning: wasTruncated
-          ? `${filename} was truncated from ${text.length} to ${MAX_CHARS_PER_DOC} characters`
-          : undefined,
       };
     } catch (error) {
       console.error("[textExtraction] Error extracting text:", error);
@@ -85,6 +88,7 @@ async function extractTextFromBlob(
         filename,
         blobPath,
         text: `[File: ${filename}] (extraction error)`,
+        uploadedAt,
         isPlaceholder: true,
         warning: `Error extracting text from ${filename}`,
       };
@@ -101,6 +105,7 @@ async function extractTextFromBlob(
           filename,
           blobPath,
           text: `[File: ${filename}] (download failed)`,
+          uploadedAt,
           isPlaceholder: true,
           warning: `Failed to download ${filename}`,
         };
@@ -120,23 +125,19 @@ async function extractTextFromBlob(
           filename,
           blobPath,
           text: `[File: ${filename}] (unsupported binary type: ${contentType})`,
+          uploadedAt,
           isPlaceholder: true,
           warning: `Unsupported binary type for ${filename}`,
         };
       }
       
-      // Truncate if too long
-      const truncatedText = text.substring(0, MAX_CHARS_PER_DOC);
-      const wasTruncated = text.length > MAX_CHARS_PER_DOC;
-
+      // Don't truncate here - let inputPreparation handle it with proper prioritization
       return {
         filename,
         blobPath,
-        text: truncatedText,
+        text,
+        uploadedAt,
         isPlaceholder: false,
-        warning: wasTruncated
-          ? `${filename} was truncated from ${text.length} to ${MAX_CHARS_PER_DOC} characters`
-          : undefined,
       };
     } catch (error) {
       console.error("[textExtraction] Error extracting binary text:", error);
@@ -144,6 +145,7 @@ async function extractTextFromBlob(
         filename,
         blobPath,
         text: `[File: ${filename}] (extraction error)`,
+        uploadedAt,
         isPlaceholder: true,
         warning: `Error extracting text from ${filename}: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
@@ -155,6 +157,7 @@ async function extractTextFromBlob(
     filename,
     blobPath,
     text: `[File: ${filename}] (unsupported file type: ${contentType})`,
+    uploadedAt,
     isPlaceholder: true,
     warning: `Unsupported file type for ${filename}`,
   };
@@ -168,36 +171,18 @@ export interface BlobInfo {
   blobPath: string;
   contentType: string;
   filename: string;
+  uploadedAt: string;
 }
 
-// NEW: Extract text from multiple blobs with character limit
+// Extract text from all blobs without truncation (truncation handled by inputPreparation)
 export async function extractTextFromBlobs(
-  blobs: BlobInfo[],
-  maxTotalChars: number = MAX_TOTAL_CHARS
+  blobs: BlobInfo[]
 ): Promise<{ results: DocumentTextResult[]; warnings: string[] }> {
   const results: DocumentTextResult[] = [];
   const warnings: string[] = [];
-  let totalChars = 0;
 
   for (const blob of blobs) {
-    // Stop if we've hit the character limit
-    if (totalChars >= maxTotalChars) {
-      warnings.push(`Reached character limit, skipped ${blobs.length - results.length} file(s)`);
-      break;
-    }
-
-    const result = await extractTextFromBlob(blob.blobPath, blob.contentType);
-    
-    // Truncate to fit within remaining budget
-    const remainingChars = maxTotalChars - totalChars;
-    if (result.text.length > remainingChars) {
-      result.text = result.text.substring(0, remainingChars);
-      if (!result.isPlaceholder) {
-        result.warning = `${result.filename} was truncated to fit character limit`;
-      }
-    }
-
-    totalChars += result.text.length;
+    const result = await extractTextFromBlob(blob.blobPath, blob.contentType, blob.uploadedAt);
     results.push(result);
 
     if (result.warning) {
@@ -208,44 +193,48 @@ export async function extractTextFromBlobs(
   return { results, warnings };
 }
 
-// NEW: Combine extracted texts into a single string
-export function combineExtractedTexts(results: DocumentTextResult[]): string {
-  if (results.length === 0) {
-    return "No documents available.";
-  }
-
-  return results
-    .map((r) => `--- ${r.filename} ---\n${r.text}`)
-    .join("\n\n");
-}
-
 // NEW: Extract content from mandate templates and proposal documents
+// Uses inputPreparation for smart prioritization and truncation
 export async function extractContentForEvaluation(
   mandateBlobs: BlobInfo[],
   proposalBlobs: BlobInfo[]
 ): Promise<ExtractedContent> {
-  const allWarnings: string[] = [];
+  // Import inputPreparation dynamically to avoid circular deps
+  const { prepareEvaluationInputs } = await import("./inputPreparation");
 
-  // Split character budget between mandate and proposal (40% mandate, 60% proposal)
-  const mandateBudget = Math.floor(MAX_TOTAL_CHARS * 0.4);
-  const proposalBudget = MAX_TOTAL_CHARS - mandateBudget;
+  // Extract raw text from all blobs
+  const mandateExtraction = await extractTextFromBlobs(mandateBlobs);
+  const proposalExtraction = await extractTextFromBlobs(proposalBlobs);
 
-  // Extract mandate texts
-  const mandateResults = await extractTextFromBlobs(mandateBlobs, mandateBudget);
-  allWarnings.push(...mandateResults.warnings);
+  // Convert DocumentTextResult to DocumentInput format for inputPreparation
+  const mandateDocs = mandateExtraction.results.map((r) => ({
+    filename: r.filename,
+    blobPath: r.blobPath,
+    text: r.text,
+    uploadedAt: r.uploadedAt,
+    isPlaceholder: r.isPlaceholder,
+    warning: r.warning,
+  }));
 
-  // Extract proposal texts
-  const proposalResults = await extractTextFromBlobs(proposalBlobs, proposalBudget);
-  allWarnings.push(...proposalResults.warnings);
+  const proposalDocs = proposalExtraction.results.map((r) => ({
+    filename: r.filename,
+    blobPath: r.blobPath,
+    text: r.text,
+    uploadedAt: r.uploadedAt,
+    isPlaceholder: r.isPlaceholder,
+    warning: r.warning,
+  }));
 
-  // Combine texts
-  const mandateText = combineExtractedTexts(mandateResults.results);
-  const proposalText = combineExtractedTexts(proposalResults.results);
+  // Use inputPreparation for smart prioritization and truncation
+  const prepared = prepareEvaluationInputs(mandateDocs, proposalDocs, MAX_TOTAL_CHARS);
 
   return {
-    mandateText,
-    proposalText,
-    totalCharacters: mandateText.length + proposalText.length,
-    extractionWarnings: allWarnings,
+    mandateText: prepared.mandateInput.combinedText,
+    proposalText: prepared.proposalInput.combinedText,
+    totalCharacters:
+      prepared.mandateInput.combinedText.length +
+      prepared.proposalInput.combinedText.length,
+    extractionWarnings: prepared.allWarnings,
+    documentStats: prepared.totalStats,
   };
 }

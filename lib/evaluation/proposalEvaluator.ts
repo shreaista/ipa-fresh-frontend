@@ -342,17 +342,19 @@ export async function runEvaluation(
     const provider = getLLMProvider();
     console.log(`[proposalEvaluator] Using LLM provider: ${provider}`);
 
-    // Extract text content from documents
+    // Extract text content from documents (include uploadedAt for prioritization)
     const mandateBlobs: BlobInfo[] = mandateTemplates.map((t) => ({
       blobPath: t.blobName,
       contentType: t.contentType,
       filename: t.name,
+      uploadedAt: t.uploadedAt,
     }));
 
     const proposalBlobs: BlobInfo[] = proposalDocs.map((d) => ({
       blobPath: d.blobPath,
       contentType: d.contentType,
       filename: d.filename,
+      uploadedAt: d.uploadedAt,
     }));
 
     const extractedContent = await extractContentForEvaluation(mandateBlobs, proposalBlobs);
@@ -405,6 +407,10 @@ export async function runEvaluation(
           mandateKey,
           totalCharactersProcessed: extractedContent.totalCharacters,
           extractionWarnings: extractedContent.extractionWarnings,
+          // Document processing stats
+          processedDocumentsCount: extractedContent.documentStats.processedDocumentsCount,
+          truncatedDocumentsCount: extractedContent.documentStats.truncatedDocumentsCount,
+          skippedDocumentsCount: extractedContent.documentStats.skippedDocumentsCount,
           // RAG matching metadata
           matchedSectionsCount: ragEvalInput.matchedSectionsCount,
           topMandateSectionsPreview: ragEvalInput.topMandateSectionsPreview,
@@ -452,6 +458,10 @@ export async function runEvaluation(
               ? `Azure OpenAI call failed: ${llmResult.error}`
               : `OpenAI call failed: ${llmResult.error}`,
           ],
+          // Document processing stats
+          processedDocumentsCount: extractedContent.documentStats.processedDocumentsCount,
+          truncatedDocumentsCount: extractedContent.documentStats.truncatedDocumentsCount,
+          skippedDocumentsCount: extractedContent.documentStats.skippedDocumentsCount,
           // RAG matching metadata (even on fallback)
           matchedSectionsCount: ragEvalInput.matchedSectionsCount,
           topMandateSectionsPreview: ragEvalInput.topMandateSectionsPreview,
@@ -497,6 +507,10 @@ export async function runEvaluation(
           ...stubResult.extractionWarnings,
           "No LLM provider configured (set AZURE_OPENAI_* or OPENAI_API_KEY) - using stub evaluation",
         ],
+        // Document processing stats (stub has no documents to process)
+        processedDocumentsCount: 0,
+        truncatedDocumentsCount: 0,
+        skippedDocumentsCount: 0,
       },
 
       fitScore: stubResult.fitScore,

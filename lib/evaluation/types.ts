@@ -35,6 +35,10 @@ export const EvaluationReportSchema = z.object({
     mandateKey: z.string().nullable(),
     totalCharactersProcessed: z.number(),
     extractionWarnings: z.array(z.string()),
+    // Document processing stats (optional for backwards compatibility)
+    processedDocumentsCount: z.number().optional(),
+    truncatedDocumentsCount: z.number().optional(),
+    skippedDocumentsCount: z.number().optional(),
     // RAG matching metadata (optional for backwards compatibility)
     matchedSectionsCount: z.number().optional(),
     topMandateSectionsPreview: z.string().optional(),
