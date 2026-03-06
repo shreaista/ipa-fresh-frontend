@@ -5,7 +5,6 @@ import {
   getFundById,
   getLinkedMandates,
   getFundMandateLinks,
-  linkMandateToFund,
   unlinkMandateFromFund,
 } from "@/lib/mock/fundsStore";
 import { listFundMandates, getFundMandateById } from "@/lib/mock/fundMandates";
@@ -22,6 +21,8 @@ interface RouteContext {
 export async function GET(request: NextRequest, context: RouteContext) {
   let fundId: string | undefined;
   
+  console.log("[fundMandates] GET request received");
+  
   try {
     const ctx = await getAuthzContext();
 
@@ -35,9 +36,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const tenantId = await requireActiveTenantId();
     
     const params = await context.params;
-    fundId = params.fundId;
+    fundId = String(params.fundId || "");
     
-    console.log("[mandates] GET request for fundId:", fundId);
+    console.log("[fundMandates] GET method: GET, fundId:", fundId);
 
     if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
       return NextResponse.json(
@@ -46,27 +47,55 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const fund = getFundById(tenantId, fundId);
+    let fund = null;
+    try {
+      fund = getFundById(tenantId, fundId);
+    } catch (err) {
+      console.error("[fundMandates] Error fetching fund:", err);
+    }
     
-    console.log("[mandates] data source: mock store");
+    console.log("[fundMandates] data source: mock store");
     
     if (!fund) {
-      console.log("[mandates] fund not found for fundId:", fundId);
+      console.log("[fundMandates] fund not found for fundId:", fundId);
       return NextResponse.json(
         { ok: false, error: "Fund not found" },
         { status: 404 }
       );
     }
 
-    const linkedMandateIds = getLinkedMandates(tenantId, fundId);
-    const links = getFundMandateLinks(tenantId, fundId);
-    const allMandates = listFundMandates(tenantId);
+    let linkedMandateIds: string[] = [];
+    let links: { mandateId: string; linkedAt?: string }[] = [];
+    let allMandates: ReturnType<typeof listFundMandates> = [];
+    
+    try {
+      linkedMandateIds = getLinkedMandates(tenantId, fundId);
+    } catch (err) {
+      console.error("[fundMandates] Error getting linked mandates:", err);
+    }
+    
+    try {
+      links = getFundMandateLinks(tenantId, fundId);
+    } catch (err) {
+      console.error("[fundMandates] Error getting mandate links:", err);
+    }
+    
+    try {
+      allMandates = listFundMandates(tenantId);
+    } catch (err) {
+      console.error("[fundMandates] Error listing mandates:", err);
+    }
 
     const linkedMandates = linkedMandateIds
       .map((id) => {
-        const mandate = getFundMandateById(tenantId, id);
-        const link = links.find((l) => l.mandateId === id);
-        return mandate ? { ...mandate, linkedAt: link?.linkedAt } : null;
+        try {
+          const mandate = getFundMandateById(tenantId, id);
+          const link = links.find((l) => l.mandateId === id);
+          return mandate ? { ...mandate, linkedAt: link?.linkedAt } : null;
+        } catch (err) {
+          console.error("[fundMandates] Error processing mandate id:", id, err);
+          return null;
+        }
       })
       .filter(Boolean);
 
@@ -76,7 +105,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const mandates = [...linkedMandates, ...availableMandates];
     
-    console.log("[mandates] returning", mandates.length, "mandates for fundId:", fundId);
+    console.log("[fundMandates] returning", mandates.length, "mandates for fundId:", fundId);
 
     return NextResponse.json({
       ok: true,
@@ -89,12 +118,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
       },
     });
   } catch (error) {
-    console.error("[mandates] error for fundId:", fundId, error);
+    console.error("[fundMandates] error for fundId:", fundId, error);
     return jsonError(error);
   }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  let fundId: string | undefined;
+  
+  console.log("[fundMandates.upload] POST request received");
+  console.log("[fundMandates.upload] method: POST");
+  
   try {
     const ctx = await getAuthzContext();
 
@@ -106,115 +140,83 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const tenantIdFromContext = await requireActiveTenantId();
-    const { fundId } = await context.params;
+    const params = await context.params;
+    fundId = String(params.fundId || "");
+    
+    console.log("[fundMandates.upload] fundId:", fundId);
 
     if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
       throw new AuthzHttpError(403, "Only administrators can manage mandates");
     }
 
-    const contentType = request.headers.get("content-type") || "";
-
-    if (contentType.includes("multipart/form-data")) {
-      return await handleFileUpload(request, tenantIdFromContext, fundId);
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch (error) {
+      console.error("[fundMandates.upload] Failed to parse form data:", error);
+      throw new AuthzHttpError(400, "Invalid form data");
     }
 
-    return await handleLinkMandate(request, tenantIdFromContext, fundId, ctx.user.id || "");
+    const file = formData.get("file") as File | null;
+    const formTenantId = formData.get("tenantId") as string | null;
+    const mandateKey = formData.get("mandateKey") as string | null;
+    
+    console.log("[fundMandates.upload] file exists:", !!file);
+    console.log("[fundMandates.upload] mandateKey:", mandateKey);
+
+    if (!file) {
+      throw new AuthzHttpError(400, "File is required");
+    }
+
+    if (file.size === 0) {
+      throw new AuthzHttpError(400, "File cannot be empty");
+    }
+
+    if (!fundId) {
+      throw new AuthzHttpError(400, "fundId is required");
+    }
+
+    const effectiveTenantId = formTenantId || tenantIdFromContext;
+    
+    if (!effectiveTenantId) {
+      throw new AuthzHttpError(400, "tenantId is required");
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const blobPath = buildFundMandatePath(effectiveTenantId, fundId, file.name);
+    const container = getDefaultContainer();
+
+    console.log("[fundMandates.upload] uploading to blobPath:", blobPath);
+
+    await uploadBlob({
+      container,
+      path: blobPath,
+      contentType: file.type || "application/octet-stream",
+      buffer,
+      metadata: {
+        tenantId: effectiveTenantId,
+        fundId,
+        originalFilename: file.name,
+        ...(mandateKey ? { mandateKey } : {}),
+      },
+    });
+
+    console.log("[fundMandates.upload] upload successful, fileName:", file.name);
+
+    return NextResponse.json({
+      ok: true,
+      data: {
+        fundId,
+        fileName: file.name,
+        blobPath,
+      },
+    });
   } catch (error) {
-    console.error("[mandates.upload]", error);
+    console.error("[fundMandates.upload]", error);
     return jsonError(error);
   }
-}
-
-async function handleFileUpload(
-  request: NextRequest,
-  tenantId: string,
-  fundId: string
-): Promise<NextResponse> {
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch (error) {
-    console.error("[mandates.upload] Failed to parse form data:", error);
-    throw new AuthzHttpError(400, "Invalid form data");
-  }
-
-  const file = formData.get("file") as File | null;
-  const formTenantId = formData.get("tenantId") as string | null;
-
-  if (!file) {
-    throw new AuthzHttpError(400, "File is required");
-  }
-
-  if (file.size === 0) {
-    throw new AuthzHttpError(400, "File cannot be empty");
-  }
-
-  const effectiveTenantId = formTenantId || tenantId;
-
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  const blobPath = buildFundMandatePath(effectiveTenantId, fundId, file.name);
-  const container = getDefaultContainer();
-
-  console.log(`[mandates.upload] Uploading file: ${file.name} to ${blobPath}`);
-
-  await uploadBlob({
-    container,
-    path: blobPath,
-    contentType: file.type || "application/octet-stream",
-    buffer,
-    metadata: {
-      tenantId: effectiveTenantId,
-      fundId,
-      originalFilename: file.name,
-    },
-  });
-
-  console.log(`[mandates.upload] Upload successful: ${file.name}`);
-
-  return NextResponse.json({
-    ok: true,
-    fileName: file.name,
-  });
-}
-
-async function handleLinkMandate(
-  request: NextRequest,
-  tenantId: string,
-  fundId: string,
-  userId: string
-): Promise<NextResponse> {
-  const text = await request.text();
-  let body: { mandateId?: string };
-  
-  try {
-    body = JSON.parse(text);
-  } catch {
-    throw new AuthzHttpError(400, "Invalid JSON body");
-  }
-
-  const { mandateId } = body;
-
-  if (!mandateId || typeof mandateId !== "string") {
-    throw new AuthzHttpError(400, "mandateId is required");
-  }
-
-  const mandate = getFundMandateById(tenantId, mandateId);
-  if (!mandate) {
-    throw new AuthzHttpError(404, "Mandate not found");
-  }
-
-  const result = linkMandateToFund(tenantId, fundId, mandateId, userId);
-
-  if (!result.ok) {
-    throw new AuthzHttpError(400, result.error || "Failed to link mandate");
-  }
-
-  return NextResponse.json({
-    ok: true,
-    data: { link: result.link },
-  });
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
