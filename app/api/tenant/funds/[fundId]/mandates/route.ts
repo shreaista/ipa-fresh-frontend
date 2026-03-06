@@ -9,6 +9,11 @@ import {
   unlinkMandateFromFund,
 } from "@/lib/mock/fundsStore";
 import { listFundMandates, getFundMandateById } from "@/lib/mock/fundMandates";
+import {
+  uploadBlob,
+  buildFundMandatePath,
+  getDefaultContainer,
+} from "@/lib/storage/azureBlob";
 
 interface RouteContext {
   params: Promise<{ fundId: string }>;
@@ -100,38 +105,116 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const tenantId = await requireActiveTenantId();
+    const tenantIdFromContext = await requireActiveTenantId();
     const { fundId } = await context.params;
 
     if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
-      throw new AuthzHttpError(403, "Only administrators can link mandates");
+      throw new AuthzHttpError(403, "Only administrators can manage mandates");
     }
 
-    const body = await request.json();
-    const { mandateId } = body;
+    const contentType = request.headers.get("content-type") || "";
 
-    if (!mandateId || typeof mandateId !== "string") {
-      throw new AuthzHttpError(400, "mandateId is required");
+    if (contentType.includes("multipart/form-data")) {
+      return await handleFileUpload(request, tenantIdFromContext, fundId);
     }
 
-    const mandate = getFundMandateById(tenantId, mandateId);
-    if (!mandate) {
-      throw new AuthzHttpError(404, "Mandate not found");
-    }
-
-    const result = linkMandateToFund(tenantId, fundId, mandateId, ctx.user.id || "");
-
-    if (!result.ok) {
-      throw new AuthzHttpError(400, result.error || "Failed to link mandate");
-    }
-
-    return NextResponse.json({
-      ok: true,
-      data: { link: result.link },
-    });
+    return await handleLinkMandate(request, tenantIdFromContext, fundId, ctx.user.id || "");
   } catch (error) {
+    console.error("[mandates.upload]", error);
     return jsonError(error);
   }
+}
+
+async function handleFileUpload(
+  request: NextRequest,
+  tenantId: string,
+  fundId: string
+): Promise<NextResponse> {
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch (error) {
+    console.error("[mandates.upload] Failed to parse form data:", error);
+    throw new AuthzHttpError(400, "Invalid form data");
+  }
+
+  const file = formData.get("file") as File | null;
+  const formTenantId = formData.get("tenantId") as string | null;
+
+  if (!file) {
+    throw new AuthzHttpError(400, "File is required");
+  }
+
+  if (file.size === 0) {
+    throw new AuthzHttpError(400, "File cannot be empty");
+  }
+
+  const effectiveTenantId = formTenantId || tenantId;
+
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const blobPath = buildFundMandatePath(effectiveTenantId, fundId, file.name);
+  const container = getDefaultContainer();
+
+  console.log(`[mandates.upload] Uploading file: ${file.name} to ${blobPath}`);
+
+  await uploadBlob({
+    container,
+    path: blobPath,
+    contentType: file.type || "application/octet-stream",
+    buffer,
+    metadata: {
+      tenantId: effectiveTenantId,
+      fundId,
+      originalFilename: file.name,
+    },
+  });
+
+  console.log(`[mandates.upload] Upload successful: ${file.name}`);
+
+  return NextResponse.json({
+    ok: true,
+    fileName: file.name,
+  });
+}
+
+async function handleLinkMandate(
+  request: NextRequest,
+  tenantId: string,
+  fundId: string,
+  userId: string
+): Promise<NextResponse> {
+  const text = await request.text();
+  let body: { mandateId?: string };
+  
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new AuthzHttpError(400, "Invalid JSON body");
+  }
+
+  const { mandateId } = body;
+
+  if (!mandateId || typeof mandateId !== "string") {
+    throw new AuthzHttpError(400, "mandateId is required");
+  }
+
+  const mandate = getFundMandateById(tenantId, mandateId);
+  if (!mandate) {
+    throw new AuthzHttpError(404, "Mandate not found");
+  }
+
+  const result = linkMandateToFund(tenantId, fundId, mandateId, userId);
+
+  if (!result.ok) {
+    throw new AuthzHttpError(400, result.error || "Failed to link mandate");
+  }
+
+  return NextResponse.json({
+    ok: true,
+    data: { link: result.link },
+  });
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
