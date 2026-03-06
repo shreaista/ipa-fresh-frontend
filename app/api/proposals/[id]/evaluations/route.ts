@@ -34,6 +34,9 @@ function sortEvaluationsByDate(evaluations: EvaluationMetadata[]): EvaluationMet
   return [...evaluations].sort((a, b) => {
     const dateA = safeParseDate(a.evaluatedAt);
     const dateB = safeParseDate(b.evaluatedAt);
+    if (dateA === 0 && dateB === 0) return 0;
+    if (dateA === 0) return 1;
+    if (dateB === 0) return -1;
     return dateB - dateA;
   });
 }

@@ -128,6 +128,12 @@ export async function uploadEvaluationJson(
   return blobPath;
 }
 
+function safeParseEvaluationDate(dateStr: string | undefined | null): number {
+  if (!dateStr) return 0;
+  const parsed = new Date(dateStr).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export async function listEvaluations(
   tenantId: string,
   proposalId: string,
@@ -148,33 +154,53 @@ export async function listEvaluations(
 
     const metadata: EvaluationMetadata = {
       blobPath: blob.path,
-      evaluationId: extractedId,
-      evaluatedAt: parsedDate?.toISOString() || blob.lastModified,
+      evaluationId: extractedId || "",
+      evaluatedAt: parsedDate?.toISOString() || blob.lastModified || "",
       fitScore: null,
-      timestamp: extractedId,
+      timestamp: extractedId || "",
     };
 
     if (loadFullData) {
-      const result = await downloadBlob(container, blob.path);
-      if (result) {
-        try {
+      try {
+        const result = await downloadBlob(container, blob.path);
+        if (result) {
           const report = JSON.parse(result.buffer.toString("utf-8")) as EvaluationReport;
-          // Use evaluationId from the report if available
-          if (report.evaluationId) {
-            metadata.evaluationId = report.evaluationId;
+          if (report && typeof report === "object") {
+            if (report.evaluationId) {
+              metadata.evaluationId = report.evaluationId;
+            }
+            if (typeof report.fitScore === "number" || report.fitScore === null) {
+              metadata.fitScore = report.fitScore;
+            }
+            if (report.confidence) {
+              metadata.confidence = report.confidence;
+            }
+            if (report.model) {
+              metadata.model = report.model;
+            }
+            if (report.engineType) {
+              metadata.engineType = report.engineType;
+            }
+            if (report.evaluatedAt) {
+              metadata.evaluatedAt = report.evaluatedAt;
+            }
+            if (report.inputs && typeof report.inputs === "object") {
+              metadata.inputs = {
+                proposalDocuments: typeof report.inputs.proposalDocuments === "number"
+                  ? report.inputs.proposalDocuments
+                  : 0,
+                mandateTemplates: typeof report.inputs.mandateTemplates === "number"
+                  ? report.inputs.mandateTemplates
+                  : 0,
+              };
+            }
           }
-          metadata.fitScore = report.fitScore;
-          metadata.confidence = report.confidence;
-          metadata.model = report.model;
-          metadata.engineType = report.engineType;
-          metadata.evaluatedAt = report.evaluatedAt || metadata.evaluatedAt;
-          metadata.inputs = {
-            proposalDocuments: report.inputs.proposalDocuments,
-            mandateTemplates: report.inputs.mandateTemplates,
-          };
-        } catch {
-          // JSON parse failed, leave defaults
         }
+      } catch (parseError) {
+        console.warn(
+          `[proposalEvaluator] Skipping malformed evaluation blob: ${blob.path}`,
+          parseError
+        );
       }
     }
 
@@ -182,7 +208,12 @@ export async function listEvaluations(
   }
 
   evaluations.sort((a, b) => {
-    return new Date(b.evaluatedAt).getTime() - new Date(a.evaluatedAt).getTime();
+    const dateA = safeParseEvaluationDate(a.evaluatedAt);
+    const dateB = safeParseEvaluationDate(b.evaluatedAt);
+    if (dateA === 0 && dateB === 0) return 0;
+    if (dateA === 0) return 1;
+    if (dateB === 0) return -1;
+    return dateB - dateA;
   });
 
   return evaluations;
