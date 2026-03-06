@@ -449,10 +449,9 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           text: `Evaluation completed. Fit Score: ${data.data.report.fitScore}`,
           type: "success",
         });
-        setLatestEvaluation(data.data.report);
-        setDisplayedEvaluation(data.data.report);
-        setViewingHistorical(false);
-        await loadEvaluations(undefined, false);
+        // Immediately reload evaluations and reset to show the newest one
+        // This ensures old warnings from previous evaluations are cleared
+        await loadEvaluations(undefined, true);
       } else {
         setEvaluationMessage({ text: data.error || "Evaluation failed", type: "error" });
       }

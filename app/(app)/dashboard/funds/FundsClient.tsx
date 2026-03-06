@@ -967,16 +967,23 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                   <p className="text-sm font-medium mb-2">Upload New Template</p>
                   <div className="flex items-end gap-3">
                     <div className="flex-1">
-                      <Label htmlFor="blobMandateKey" className="text-xs">Mandate Key</Label>
+                      <Label htmlFor="blobMandateKey" className="text-xs">
+                        Mandate Key <span className="text-red-500">*</span>
+                      </Label>
                       <Input
                         id="blobMandateKey"
                         value={blobMandateKey}
                         onChange={(e) => setBlobMandateKey(e.target.value)}
                         placeholder="e.g., growth-equity-2026"
-                        className="h-8 text-sm mt-1"
+                        className={`h-8 text-sm mt-1 ${!blobMandateKey.trim() ? "border-amber-300 focus:border-amber-400" : ""}`}
                       />
+                      {!blobMandateKey.trim() && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Enter a mandate key to enable upload
+                        </p>
+                      )}
                     </div>
-                    <div>
+                    <div className="flex flex-col items-end">
                       <input
                         type="file"
                         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -1009,14 +1016,28 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                       />
                       <Button
                         size="sm"
-                        onClick={() => blobFileInputRef.current?.click()}
-                        disabled={blobLoading || !blobMandateKey.trim()}
+                        onClick={() => {
+                          if (!blobMandateKey.trim()) {
+                            setBlobUploadMessage({
+                              message: "Please enter a mandate key first.",
+                              type: "error",
+                            });
+                            return;
+                          }
+                          blobFileInputRef.current?.click();
+                        }}
+                        disabled={blobLoading}
+                        variant={!blobMandateKey.trim() ? "outline" : "default"}
+                        className={!blobMandateKey.trim() ? "opacity-60" : ""}
                       >
                         <Upload className="h-4 w-4 mr-2" />
-                        Upload
+                        {blobLoading ? "Uploading..." : "Select & Upload"}
                       </Button>
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Supported formats: PDF, DOC, DOCX (max 25MB)
+                  </p>
                 </div>
                 {blobMandates.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
