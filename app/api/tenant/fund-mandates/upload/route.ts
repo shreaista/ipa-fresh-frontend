@@ -17,7 +17,11 @@ const ALLOWED_CONTENT_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
+const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx"];
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+const UNSUPPORTED_FILE_ERROR = "Only PDF, DOC, and DOCX files are supported.";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,11 +42,12 @@ export async function POST(request: NextRequest) {
       throw new AuthzHttpError(400, "file is required");
     }
 
-    if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
-      throw new AuthzHttpError(
-        400,
-        "Invalid file type. Only PDF, DOC, and DOCX files are allowed."
-      );
+    const extension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    const isValidExtension = ALLOWED_EXTENSIONS.includes(extension);
+    const isValidContentType = ALLOWED_CONTENT_TYPES.includes(file.type);
+
+    if (!isValidExtension && !isValidContentType) {
+      throw new AuthzHttpError(400, UNSUPPORTED_FILE_ERROR);
     }
 
     if (file.size > MAX_FILE_SIZE) {

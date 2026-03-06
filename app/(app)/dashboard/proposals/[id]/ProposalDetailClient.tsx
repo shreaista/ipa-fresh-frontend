@@ -1094,12 +1094,19 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               <>
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="hidden"
                   ref={fileInputRef}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
+                      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+                      const allowedExtensions = [".pdf", ".doc", ".docx"];
+                      if (!allowedExtensions.includes(ext)) {
+                        setMessage({ text: "Only PDF, DOC, and DOCX files are supported.", type: "error" });
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                        return;
+                      }
                       handleUpload(file);
                     }
                   }}
@@ -1493,11 +1500,24 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             )}
           </div>
         ) : (
-          <EmptyState
-            icon={Award}
-            title="No Evaluations Yet"
-            description="Run your first evaluation to analyze this proposal against the fund mandate."
-          />
+          <div className="p-6">
+            {documents.length === 0 && (
+              <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">No documents uploaded</p>
+                    <p className="text-sm text-amber-700">Upload a PDF, DOC, or DOCX document to run meaningful evaluation.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <EmptyState
+              icon={Award}
+              title="No Evaluations Yet"
+              description="Run your first evaluation to analyze this proposal against the fund mandate."
+            />
+          </div>
         )}
       </DataCard>
     </div>

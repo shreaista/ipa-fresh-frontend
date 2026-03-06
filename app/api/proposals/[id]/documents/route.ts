@@ -20,7 +20,9 @@ import {
   listProposalDocuments,
   getStorageStatus,
   ALLOWED_CONTENT_TYPES,
+  ALLOWED_EXTENSIONS,
   MAX_FILE_SIZE,
+  UNSUPPORTED_FILE_ERROR,
 } from "@/lib/storage/proposalDocuments";
 import { logAudit } from "@/lib/audit";
 
@@ -96,11 +98,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(400, "file is required");
     }
 
-    if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
-      throw new AuthzHttpError(
-        400,
-        "Invalid file type. Allowed: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, images, TXT, CSV."
-      );
+    const extension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    const isValidExtension = ALLOWED_EXTENSIONS.includes(extension);
+    const isValidContentType = ALLOWED_CONTENT_TYPES.includes(file.type);
+
+    if (!isValidExtension && !isValidContentType) {
+      throw new AuthzHttpError(400, UNSUPPORTED_FILE_ERROR);
     }
 
     if (file.size > MAX_FILE_SIZE) {

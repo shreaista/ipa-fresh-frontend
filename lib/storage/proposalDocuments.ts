@@ -67,31 +67,31 @@ export interface ListProposalDocumentsResult {
 // File Validation
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: Allowed file types for proposal documents
+// Allowed file types for proposal documents (evaluation-supported formats only)
 export const ALLOWED_CONTENT_TYPES = [
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "text/plain",
-  "text/csv",
 ];
 
-// NEW: Max file size 25MB
+// Allowed file extensions for proposal documents
+export const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx"];
+
+// Max file size 25MB
 export const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
+// Error message for unsupported file types
+export const UNSUPPORTED_FILE_ERROR = "Only PDF, DOC, and DOCX files are supported.";
+
 export function validateFile(file: File): { valid: boolean; error?: string } {
-  if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
+  const extension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+  const isValidExtension = ALLOWED_EXTENSIONS.includes(extension);
+  const isValidContentType = ALLOWED_CONTENT_TYPES.includes(file.type);
+
+  if (!isValidExtension && !isValidContentType) {
     return {
       valid: false,
-      error: "Invalid file type. Allowed: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, images, TXT, CSV.",
+      error: UNSUPPORTED_FILE_ERROR,
     };
   }
 

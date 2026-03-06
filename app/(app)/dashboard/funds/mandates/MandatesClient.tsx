@@ -94,6 +94,14 @@ export default function MandatesClient() {
       return;
     }
 
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    if (!allowedExtensions.includes(ext)) {
+      setMessage({ text: "Only PDF, DOC, and DOCX files are supported.", type: "error" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     setUploading(true);
     setMessage(null);
 

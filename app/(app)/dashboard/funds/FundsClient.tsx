@@ -299,6 +299,19 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
   const handleFileChange = async (mandateId: string, file: File | null) => {
     if (!file) return;
 
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    if (!allowedExtensions.includes(ext)) {
+      setUploadMessage({
+        id: mandateId,
+        message: "Only PDF, DOC, and DOCX files are supported.",
+        type: "error",
+      });
+      const input = fileInputRefs.current.get(mandateId);
+      if (input) input.value = "";
+      return;
+    }
+
     setUploadingId(mandateId);
     setUploadMessage(null);
 
@@ -775,7 +788,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                           <div className="flex items-center gap-2">
                             <input
                               type="file"
-                              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                               className="hidden"
                               ref={(el) => {
                                 if (el) fileInputRefs.current.set(mandate.id, el);
@@ -928,12 +941,22 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                   <div className="flex items-center gap-2">
                     <input
                       type="file"
-                      accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                       className="hidden"
                       ref={blobFileInputRef}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
+                          const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+                          const allowedExtensions = [".pdf", ".doc", ".docx"];
+                          if (!allowedExtensions.includes(ext)) {
+                            setBlobUploadMessage({
+                              message: "Only PDF, DOC, and DOCX files are supported.",
+                              type: "error",
+                            });
+                            if (blobFileInputRef.current) blobFileInputRef.current.value = "";
+                            return;
+                          }
                           handleBlobUpload("F-001", file);
                         }
                       }}
