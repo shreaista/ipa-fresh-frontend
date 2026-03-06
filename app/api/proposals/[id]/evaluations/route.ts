@@ -17,10 +17,25 @@ import { getProposalForUser } from "@/lib/mock/proposals";
 import {
   listEvaluations,
   downloadEvaluation,
+  type EvaluationMetadata,
 } from "@/lib/evaluation/proposalEvaluator";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+function safeParseDate(dateStr: string | undefined | null): number {
+  if (!dateStr) return 0;
+  const parsed = new Date(dateStr).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function sortEvaluationsByDate(evaluations: EvaluationMetadata[]): EvaluationMetadata[] {
+  return [...evaluations].sort((a, b) => {
+    const dateA = safeParseDate(a.evaluatedAt);
+    const dateB = safeParseDate(b.evaluatedAt);
+    return dateB - dateA;
+  });
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -69,19 +84,52 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(403, "Access denied to this proposal");
     }
 
-    // List all evaluations with full data (fitScore, confidence, model, engineType, inputs)
-    const evaluations = await listEvaluations(tenantId, id, true);
+    // Parse includeLatest safely
+    const includeLatest = request.nextUrl.searchParams.get("includeLatest") === "true";
+
+    // Load evaluations safely from blob storage
+    let evaluations: EvaluationMetadata[] = [];
+    try {
+      const rawEvaluations = await listEvaluations(tenantId, id, true);
+      evaluations = sortEvaluationsByDate(rawEvaluations);
+    } catch (listError) {
+      console.error("[proposalEvaluations.list] Failed to list evaluations:", listError);
+      return NextResponse.json({
+        ok: true,
+        data: {
+          evaluations: [],
+          count: 0,
+          latestReport: null,
+        },
+      });
+    }
+
+    // Handle empty evaluations case
+    if (evaluations.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        data: {
+          evaluations: [],
+          count: 0,
+          latestReport: null,
+        },
+      });
+    }
 
     // Optionally include the latest full evaluation report
-    const includeLatest = request.nextUrl.searchParams.get("includeLatest") === "true";
     let latestReport = null;
 
     if (includeLatest && evaluations.length > 0) {
-      latestReport = await downloadEvaluation(
-        tenantId,
-        id,
-        evaluations[0].blobPath
-      );
+      const latest = evaluations[0];
+      // Guard optional fields before downloading
+      if (latest && latest.blobPath) {
+        try {
+          latestReport = await downloadEvaluation(tenantId, id, latest.blobPath);
+        } catch (downloadError) {
+          console.error("[proposalEvaluations.list] Failed to download latest report:", downloadError);
+          latestReport = null;
+        }
+      }
     }
 
     return NextResponse.json({
@@ -93,6 +141,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       },
     });
   } catch (error) {
-    return jsonError(error);
+    console.error("[proposalEvaluations.list]", error);
+    if (error instanceof AuthzHttpError) {
+      return jsonError(error);
+    }
+    return NextResponse.json(
+      { ok: false, error: "Failed to load evaluations" },
+      { status: 500 }
+    );
   }
 }
