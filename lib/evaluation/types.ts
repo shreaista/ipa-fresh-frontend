@@ -103,15 +103,19 @@ export const MAX_TOTAL_CHARS = 20000;
 // NEW: Maximum characters per document
 export const MAX_CHARS_PER_DOC = 8000;
 
-// NEW: Supported text extraction file types
+// Supported plain text extraction file types (read directly as UTF-8)
 export const TEXT_EXTRACTABLE_TYPES = [
   "text/plain",
   "text/csv",
 ];
 
-// NEW: Types that will have extraction in the future
-export const FUTURE_EXTRACTION_TYPES = [
+// Supported binary extraction file types (PDF, DOCX)
+export const BINARY_EXTRACTABLE_TYPES = [
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+// Legacy .doc format - not supported for extraction
+export const UNSUPPORTED_LEGACY_TYPES = [
+  "application/msword",
 ];

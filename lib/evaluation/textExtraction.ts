@@ -1,18 +1,21 @@
 import "server-only";
 
-// NEW: Text Extraction Helper for Proposal Evaluation
+// Text Extraction Helper for Proposal Evaluation
 //
-// Phase 1 implementation:
+// Supported formats:
 // - .txt files: Read directly as text
-// - .pdf, .docx: Return placeholder (extraction not implemented yet)
+// - .csv files: Read directly as text
+// - .pdf files: Extract using pdf-parse
+// - .docx files: Extract using mammoth
 
 import { downloadBlob, getDefaultContainer } from "@/lib/storage/azureBlob";
 import {
   TEXT_EXTRACTABLE_TYPES,
-  FUTURE_EXTRACTION_TYPES,
+  BINARY_EXTRACTABLE_TYPES,
   MAX_CHARS_PER_DOC,
   MAX_TOTAL_CHARS,
 } from "./types";
+import { extractDocxText, extractPdfText } from "@/lib/textExtractor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -37,7 +40,7 @@ export interface ExtractedContent {
 // Text Extraction
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW: Extract text from a single blob
+// Extract text from a single blob
 async function extractTextFromBlob(
   blobPath: string,
   contentType: string
@@ -45,7 +48,7 @@ async function extractTextFromBlob(
   const filename = blobPath.split("/").pop() || blobPath;
   const container = getDefaultContainer();
 
-  // Check if text extraction is supported
+  // Check if plain text extraction is supported (txt, csv)
   if (TEXT_EXTRACTABLE_TYPES.includes(contentType)) {
     try {
       const result = await downloadBlob(container, blobPath);
@@ -88,15 +91,63 @@ async function extractTextFromBlob(
     }
   }
 
-  // Check if this is a type that will be supported in the future
-  if (FUTURE_EXTRACTION_TYPES.includes(contentType)) {
-    return {
-      filename,
-      blobPath,
-      text: `[File: ${filename}] (text extraction not implemented yet for ${getFileTypeLabel(contentType)})`,
-      isPlaceholder: true,
-      warning: `Text extraction not available for ${filename} (${getFileTypeLabel(contentType)})`,
-    };
+  // Check if binary extraction is supported (PDF, DOCX)
+  if (BINARY_EXTRACTABLE_TYPES.includes(contentType)) {
+    try {
+      const result = await downloadBlob(container, blobPath);
+      
+      if (!result) {
+        return {
+          filename,
+          blobPath,
+          text: `[File: ${filename}] (download failed)`,
+          isPlaceholder: true,
+          warning: `Failed to download ${filename}`,
+        };
+      }
+
+      let text: string;
+      
+      // Extract based on content type
+      if (contentType === "application/pdf") {
+        text = await extractPdfText(result.buffer);
+      } else if (
+        contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ) {
+        text = await extractDocxText(result.buffer);
+      } else {
+        return {
+          filename,
+          blobPath,
+          text: `[File: ${filename}] (unsupported binary type: ${contentType})`,
+          isPlaceholder: true,
+          warning: `Unsupported binary type for ${filename}`,
+        };
+      }
+      
+      // Truncate if too long
+      const truncatedText = text.substring(0, MAX_CHARS_PER_DOC);
+      const wasTruncated = text.length > MAX_CHARS_PER_DOC;
+
+      return {
+        filename,
+        blobPath,
+        text: truncatedText,
+        isPlaceholder: false,
+        warning: wasTruncated
+          ? `${filename} was truncated from ${text.length} to ${MAX_CHARS_PER_DOC} characters`
+          : undefined,
+      };
+    } catch (error) {
+      console.error("[textExtraction] Error extracting binary text:", error);
+      return {
+        filename,
+        blobPath,
+        text: `[File: ${filename}] (extraction error)`,
+        isPlaceholder: true,
+        warning: `Error extracting text from ${filename}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      };
+    }
   }
 
   // Unsupported type
@@ -107,17 +158,6 @@ async function extractTextFromBlob(
     isPlaceholder: true,
     warning: `Unsupported file type for ${filename}`,
   };
-}
-
-// NEW: Get human-readable file type label
-function getFileTypeLabel(contentType: string): string {
-  if (contentType.includes("pdf")) return "PDF";
-  if (contentType.includes("word") || contentType.includes("document")) return "Word document";
-  if (contentType.includes("excel") || contentType.includes("spreadsheet")) return "Excel spreadsheet";
-  if (contentType.includes("powerpoint") || contentType.includes("presentation")) return "PowerPoint";
-  if (contentType.includes("text/plain")) return "text file";
-  if (contentType.includes("csv")) return "CSV file";
-  return contentType;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
