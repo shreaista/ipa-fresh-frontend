@@ -83,6 +83,24 @@ const funds: Fund[] = [
     createdAt: "2026-01-20T10:00:00Z",
     updatedAt: "2026-01-20T10:00:00Z",
   },
+  {
+    id: "F-001",
+    tenantId: "tenant-001",
+    name: "Primary Investment Fund",
+    code: "PIF",
+    status: "active",
+    createdAt: "2026-01-10T10:00:00Z",
+    updatedAt: "2026-01-10T10:00:00Z",
+  },
+  {
+    id: "F-002",
+    tenantId: "tenant-001",
+    name: "Secondary Growth Fund",
+    code: "SGF",
+    status: "active",
+    createdAt: "2026-01-12T10:00:00Z",
+    updatedAt: "2026-01-12T10:00:00Z",
+  },
 ];
 
 const fundMandateLinks: FundMandateLink[] = [
@@ -102,10 +120,26 @@ const fundMandateLinks: FundMandateLink[] = [
     linkedAt: "2026-02-15T10:00:00Z",
     linkedByUserId: "user-001",
   },
+  {
+    id: "link-003",
+    fundId: "F-001",
+    mandateId: "fm-001",
+    tenantId: "tenant-001",
+    linkedAt: "2026-02-20T10:00:00Z",
+    linkedByUserId: "user-001",
+  },
+  {
+    id: "link-004",
+    fundId: "F-002",
+    mandateId: "fm-002",
+    tenantId: "tenant-001",
+    linkedAt: "2026-02-22T10:00:00Z",
+    linkedByUserId: "user-001",
+  },
 ];
 
-let nextFundId = 6;
-let nextLinkId = 3;
+let nextFundId = 8;
+let nextLinkId = 5;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fund CRUD Operations

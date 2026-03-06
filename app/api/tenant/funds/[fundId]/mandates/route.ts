@@ -15,6 +15,8 @@ interface RouteContext {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
+  let fundId: string | undefined;
+  
   try {
     const ctx = await getAuthzContext();
 
@@ -26,15 +28,29 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const tenantId = await requireActiveTenantId();
-    const { fundId } = await context.params;
+    
+    const params = await context.params;
+    fundId = params.fundId;
+    
+    console.log("[mandates] GET request for fundId:", fundId);
 
     if (ctx.role !== "tenant_admin" && ctx.role !== "saas_admin") {
-      throw new AuthzHttpError(403, "Only administrators can view fund mandates");
+      return NextResponse.json(
+        { ok: false, error: "Only administrators can view fund mandates" },
+        { status: 403 }
+      );
     }
 
     const fund = getFundById(tenantId, fundId);
+    
+    console.log("[mandates] data source: mock store");
+    
     if (!fund) {
-      throw new AuthzHttpError(404, "Fund not found");
+      console.log("[mandates] fund not found for fundId:", fundId);
+      return NextResponse.json(
+        { ok: false, error: "Fund not found" },
+        { status: 404 }
+      );
     }
 
     const linkedMandateIds = getLinkedMandates(tenantId, fundId);
@@ -53,15 +69,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
       (m) => !linkedMandateIds.includes(m.id)
     );
 
+    const mandates = [...linkedMandates, ...availableMandates];
+    
+    console.log("[mandates] returning", mandates.length, "mandates for fundId:", fundId);
+
     return NextResponse.json({
       ok: true,
       data: {
+        fundId,
+        mandates,
         fund,
         linkedMandates,
         availableMandates,
       },
     });
   } catch (error) {
+    console.error("[mandates] error for fundId:", fundId, error);
     return jsonError(error);
   }
 }
