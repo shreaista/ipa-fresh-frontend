@@ -2,9 +2,9 @@ import "server-only";
 
 // Python Extraction Client
 //
-// Calls the local Python extractor service for document text extraction.
+// Calls the Python extractor service (Azure Container App or local) for document text extraction.
 // The Python service provides better extraction quality for PDF and DOCX files.
-// Falls back to Node.js extraction if the Python service is unavailable.
+// Falls back to Node.js extraction if the Python service is unavailable or not configured.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -28,7 +28,10 @@ export interface PythonExtractionResult {
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PYTHON_EXTRACTOR_URL = process.env.PYTHON_EXTRACTOR_URL || "http://127.0.0.1:8001";
+function getPythonExtractorUrl(): string | null {
+  return process.env.PYTHON_EXTRACTOR_URL || null;
+}
+
 const PYTHON_EXTRACTOR_TIMEOUT_MS = parseInt(
   process.env.PYTHON_EXTRACTOR_TIMEOUT_MS || "30000",
   10
@@ -52,13 +55,32 @@ export async function extractDocumentViaPython(params: {
 }): Promise<PythonExtractionResult> {
   const { connectionString, container, blobPath, fileType } = params;
 
-  console.log(`[pythonExtractionClient] Calling Python extractor for: ${blobPath}`);
+  const baseUrl = getPythonExtractorUrl();
+
+  if (!baseUrl) {
+    console.warn(
+      "[pythonExtractionClient] PYTHON_EXTRACTOR_URL not configured, fallback will be used"
+    );
+    return {
+      success: false,
+      text: "",
+      error: "Python extractor URL not configured, fallback used",
+      charactersProcessed: 0,
+    };
+  }
+
+  const extractUrl = `${baseUrl}/extract`;
+
+  // Debug logging before fetch
+  console.log(`[pythonExtractor] baseUrl=${baseUrl}`);
+  console.log(`[pythonExtractor] request blobPath=${blobPath}`);
+  console.log(`[pythonExtractor] request fileType=${fileType}`);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), PYTHON_EXTRACTOR_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${PYTHON_EXTRACTOR_URL}/extract`, {
+    const response = await fetch(extractUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -74,8 +96,12 @@ export async function extractDocumentViaPython(params: {
 
     clearTimeout(timeoutId);
 
+    // Debug logging after fetch
+    console.log(`[pythonExtractor] response status=${response.status}`);
+
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
+      console.error(`[pythonExtractor] response body (error): ${errorText}`);
       console.error(
         `[pythonExtractionClient] Python extractor returned ${response.status}: ${errorText}`
       );
@@ -137,15 +163,29 @@ export async function extractDocumentViaPython(params: {
 }
 
 /**
+ * Checks if the Python extractor service is configured.
+ * Returns true if PYTHON_EXTRACTOR_URL environment variable is set.
+ */
+export function isPythonExtractorConfigured(): boolean {
+  return !!getPythonExtractorUrl();
+}
+
+/**
  * Checks if the Python extractor service is available.
  * Can be used for health checks or to decide whether to attempt Python extraction.
  */
 export async function isPythonExtractorAvailable(): Promise<boolean> {
+  const baseUrl = getPythonExtractorUrl();
+
+  if (!baseUrl) {
+    return false;
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
 
   try {
-    const response = await fetch(`${PYTHON_EXTRACTOR_URL}/health`, {
+    const response = await fetch(`${baseUrl}/health`, {
       method: "GET",
       signal: controller.signal,
     });

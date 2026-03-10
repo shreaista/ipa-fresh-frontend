@@ -326,11 +326,20 @@ export async function runEvaluation(
 
   let mandateTemplates: FundMandateBlob[] = [];
   if (mandateKey) {
+    console.log(`[proposalEvaluator] Loading mandate templates for key: ${mandateKey}`);
     try {
       mandateTemplates = await listFundMandates({ tenantId, mandateKey });
+      console.log(
+        `[proposalEvaluator] Found ${mandateTemplates.length} mandate template(s) for ${mandateKey}`
+      );
+      for (const t of mandateTemplates) {
+        console.log(`[proposalEvaluator]   - ${t.name} (${t.contentType}, ${t.size} bytes)`);
+      }
     } catch (error) {
       console.error("[proposalEvaluator] Error listing mandate templates:", error);
     }
+  } else {
+    console.log("[proposalEvaluator] No mandateKey provided, skipping mandate template loading");
   }
 
   // Generate unique evaluation ID - this will be used as folder name and in report

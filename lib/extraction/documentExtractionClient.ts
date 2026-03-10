@@ -112,31 +112,47 @@ export async function extractDocumentFromBlob(
   const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
 
   // Try Python extractor first for binary document types (PDF, DOCX)
-  if (SUPPORTED_BINARY_TYPES.includes(fileType) && connectionString) {
-    console.log(`[extractDocumentFromBlob] Calling Python extractor for: ${displayName}`);
+  if (SUPPORTED_BINARY_TYPES.includes(fileType)) {
+    console.log(`[extractDocumentFromBlob] Entering Python extractor branch for: ${displayName}`);
+    console.log(`[extractDocumentFromBlob] fileType=${fileType}, hasConnectionString=${!!connectionString}`);
 
-    const pythonResult = await extractDocumentViaPython({
-      connectionString,
-      container,
-      blobPath,
-      fileType,
-    });
-
-    if (pythonResult.success) {
+    if (!connectionString) {
       console.log(
-        `[extractDocumentFromBlob] Python extraction succeeded for: ${displayName} (${pythonResult.charactersProcessed} chars)`
+        `[extractDocumentFromBlob] Skipping Python extractor: no Azure connection string configured`
       );
-      return {
-        text: pythonResult.text,
-        warnings,
-        charactersProcessed: pythonResult.charactersProcessed,
-      };
-    }
+      console.log(`[extractDocumentFromBlob] Fallback reason: AZURE_STORAGE_CONNECTION_STRING not set`);
+    } else {
+      console.log(`[extractDocumentFromBlob] Calling Python extractor for: ${displayName}`);
 
-    // Python extraction failed, log warning and fallback to Node extraction
-    const fallbackWarning = `Python extractor unavailable, fallback used for ${displayName}`;
-    console.warn(`[extractDocumentFromBlob] ${fallbackWarning}: ${pythonResult.error}`);
-    warnings.push(fallbackWarning);
+      const pythonResult = await extractDocumentViaPython({
+        connectionString,
+        container,
+        blobPath,
+        fileType,
+      });
+
+      if (pythonResult.success) {
+        console.log(
+          `[extractDocumentFromBlob] Python extraction succeeded for: ${displayName} (${pythonResult.charactersProcessed} chars)`
+        );
+        return {
+          text: pythonResult.text,
+          warnings,
+          charactersProcessed: pythonResult.charactersProcessed,
+        };
+      }
+
+      // Python extraction failed, log warning and fallback to Node extraction
+      console.log(`[extractDocumentFromBlob] Entering fallback branch for: ${displayName}`);
+      console.log(`[extractDocumentFromBlob] Fallback reason: ${pythonResult.error}`);
+      const fallbackWarning = `Python extractor unavailable, fallback used for ${displayName}`;
+      console.warn(`[extractDocumentFromBlob] ${fallbackWarning}: ${pythonResult.error}`);
+      warnings.push(fallbackWarning);
+    }
+  } else {
+    console.log(
+      `[extractDocumentFromBlob] Skipping Python extractor for non-binary type: ${fileType}`
+    );
   }
 
   // Fallback: Download blob and use Node.js extraction

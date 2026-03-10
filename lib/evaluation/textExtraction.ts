@@ -87,7 +87,7 @@ export async function extractTextFromBlobs(
 }
 
 // Extract content from mandate templates and proposal documents
-// Uses documentExtractionClient for extraction
+// Uses documentExtractionClient for extraction (routes to Python extractor)
 // Uses inputPreparation for smart prioritization and truncation
 export async function extractContentForEvaluation(
   mandateBlobs: BlobInfo[],
@@ -96,9 +96,44 @@ export async function extractContentForEvaluation(
   // Import inputPreparation dynamically to avoid circular deps
   const { prepareEvaluationInputs } = await import("./inputPreparation");
 
-  // Extract raw text from all blobs using extraction client
+  // Log extraction start
+  console.log(
+    `[textExtraction] Starting extraction: ${mandateBlobs.length} mandate template(s), ${proposalBlobs.length} proposal document(s)`
+  );
+
+  // Extract raw text from mandate templates
+  if (mandateBlobs.length > 0) {
+    console.log("[textExtraction] Extracting mandate template text...");
+    for (const blob of mandateBlobs) {
+      console.log(`[textExtraction]   - ${blob.filename} (${blob.contentType})`);
+    }
+  } else {
+    console.log("[textExtraction] No mandate templates to extract");
+  }
+
   const mandateExtraction = await extractTextFromBlobs(mandateBlobs);
+
+  // Log mandate extraction results
+  const mandateChars = mandateExtraction.results.reduce((sum, r) => sum + r.text.length, 0);
+  console.log(
+    `[textExtraction] Mandate extraction complete: ${mandateChars} characters from ${mandateExtraction.results.length} file(s)`
+  );
+  if (mandateExtraction.warnings.length > 0) {
+    console.log(`[textExtraction] Mandate warnings: ${mandateExtraction.warnings.join("; ")}`);
+  }
+
+  // Extract raw text from proposal documents
+  if (proposalBlobs.length > 0) {
+    console.log("[textExtraction] Extracting proposal document text...");
+  }
+
   const proposalExtraction = await extractTextFromBlobs(proposalBlobs);
+
+  // Log proposal extraction results
+  const proposalChars = proposalExtraction.results.reduce((sum, r) => sum + r.text.length, 0);
+  console.log(
+    `[textExtraction] Proposal extraction complete: ${proposalChars} characters from ${proposalExtraction.results.length} file(s)`
+  );
 
   // Convert DocumentTextResult to DocumentInput format for inputPreparation
   const mandateDocs = mandateExtraction.results.map((r) => ({
@@ -122,12 +157,26 @@ export async function extractContentForEvaluation(
   // Use inputPreparation for smart prioritization and truncation
   const prepared = prepareEvaluationInputs(mandateDocs, proposalDocs, MAX_TOTAL_CHARS);
 
+  // Log final prepared content stats
+  const totalChars =
+    prepared.mandateInput.combinedText.length +
+    prepared.proposalInput.combinedText.length;
+
+  console.log(
+    `[textExtraction] Extraction complete - mandate: ${prepared.mandateInput.combinedText.length} chars, proposal: ${prepared.proposalInput.combinedText.length} chars, total: ${totalChars} chars`
+  );
+  console.log(
+    `[textExtraction] Document stats - processed: ${prepared.totalStats.processedDocumentsCount}, truncated: ${prepared.totalStats.truncatedDocumentsCount}, skipped: ${prepared.totalStats.skippedDocumentsCount}`
+  );
+
+  if (prepared.allWarnings.length > 0) {
+    console.log(`[textExtraction] All warnings: ${prepared.allWarnings.length}`);
+  }
+
   return {
     mandateText: prepared.mandateInput.combinedText,
     proposalText: prepared.proposalInput.combinedText,
-    totalCharacters:
-      prepared.mandateInput.combinedText.length +
-      prepared.proposalInput.combinedText.length,
+    totalCharacters: totalChars,
     extractionWarnings: prepared.allWarnings,
     documentStats: prepared.totalStats,
   };
