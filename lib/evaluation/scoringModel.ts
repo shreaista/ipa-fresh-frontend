@@ -23,15 +23,12 @@ export const SCORE_WEIGHTS = {
   riskAdjustmentMin: -20,
 } as const;
 
-// Maximum positive score before risk adjustment
+// Maximum positive score before risk adjustment (75)
 export const MAX_POSITIVE_SCORE =
   SCORE_WEIGHTS.sectorFit +
   SCORE_WEIGHTS.geographyFit +
   SCORE_WEIGHTS.stageFit +
-  SCORE_WEIGHTS.ticketSizeFit; // 75
-
-// Base score added to make total possible 100
-export const BASE_SCORE = 100 - MAX_POSITIVE_SCORE; // 25
+  SCORE_WEIGHTS.ticketSizeFit;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -67,7 +64,6 @@ export interface ScoringResult {
   finalScore: number;
   scoringMethod: "structured" | "fallback";
   breakdown: {
-    baseScore: number;
     sectorFit: number;
     geographyFit: number;
     stageFit: number;
@@ -104,21 +100,10 @@ export type ScoringInputType = z.infer<typeof ScoringInputSchema>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Convert match level to score percentage.
+ * Convert match level to score (binary: full = max, else = 0).
  */
-function matchToPercentage(match: "full" | "partial" | "none" | "unknown"): number {
-  switch (match) {
-    case "full":
-      return 1.0;
-    case "partial":
-      return 0.5;
-    case "none":
-      return 0.0;
-    case "unknown":
-      return 0.25; // Small score for unknown to avoid penalizing missing data
-    default:
-      return 0.0;
-  }
+function matchToScore(match: "full" | "partial" | "none" | "unknown", maxScore: number): number {
+  return match === "full" ? maxScore : 0;
 }
 
 /**
@@ -139,40 +124,31 @@ function calculateRiskAdjustment(risks: string[]): number {
 
 /**
  * Compute structured scores from scoring input.
+ * Uses binary rules: full match = max points, else = 0.
  */
 export function computeStructuredScores(input: ScoringInput): StructuredScores {
   return {
-    sectorFit: Math.round(
-      matchToPercentage(input.sectorMatch) * SCORE_WEIGHTS.sectorFit
-    ),
-    geographyFit: Math.round(
-      matchToPercentage(input.geographyMatch) * SCORE_WEIGHTS.geographyFit
-    ),
-    stageFit: Math.round(
-      matchToPercentage(input.stageMatch) * SCORE_WEIGHTS.stageFit
-    ),
-    ticketSizeFit: Math.round(
-      matchToPercentage(input.ticketSizeMatch) * SCORE_WEIGHTS.ticketSizeFit
-    ),
+    sectorFit: matchToScore(input.sectorMatch, SCORE_WEIGHTS.sectorFit),
+    geographyFit: matchToScore(input.geographyMatch, SCORE_WEIGHTS.geographyFit),
+    stageFit: matchToScore(input.stageMatch, SCORE_WEIGHTS.stageFit),
+    ticketSizeFit: matchToScore(input.ticketSizeMatch, SCORE_WEIGHTS.ticketSizeFit),
     riskAdjustment: calculateRiskAdjustment(input.identifiedRisks),
   };
 }
 
 /**
  * Calculate final score from structured scores.
- * finalScore = base + sectorFit + geographyFit + stageFit + ticketSizeFit + riskAdjustment
+ * finalScore = sectorFit + geographyFit + stageFit + ticketSizeFit + riskAdjustment
  * Clamped between 0 and 100.
  */
 export function calculateFinalScore(scores: StructuredScores): number {
   const rawScore =
-    BASE_SCORE +
     scores.sectorFit +
     scores.geographyFit +
     scores.stageFit +
     scores.ticketSizeFit +
     scores.riskAdjustment;
 
-  // Clamp between 0 and 100
   return Math.max(0, Math.min(100, rawScore));
 }
 
@@ -188,7 +164,6 @@ export function computeScoring(input: ScoringInput): ScoringResult {
     finalScore,
     scoringMethod: "structured",
     breakdown: {
-      baseScore: BASE_SCORE,
       sectorFit: structuredScores.sectorFit,
       geographyFit: structuredScores.geographyFit,
       stageFit: structuredScores.stageFit,
@@ -416,6 +391,113 @@ export function inferSignalsFromEvaluation(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Direct Score Computation from Evaluation Content (Simple Rules)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Phrases that indicate sector alignment when present in strengths */
+const SECTOR_ALIGNMENT_PHRASES = [
+  "sector alignment",
+  "sector fit",
+  "industry alignment",
+  "sector match",
+  "strong sector",
+  "sector aligns",
+  "mandate sector",
+  "sector alignment with mandate",
+];
+
+/** Phrases that indicate geography alignment when present in strengths */
+const GEOGRAPHY_ALIGNMENT_PHRASES = [
+  "geography alignment",
+  "geographic fit",
+  "geography match",
+  "geographic alignment",
+  "region",
+  "geographic fit with mandate",
+];
+
+/** Phrases that indicate stage alignment when present in strengths */
+const STAGE_ALIGNMENT_PHRASES = [
+  "stage fit",
+  "stage alignment",
+  "stage match",
+  "investment stage",
+  "stage aligns",
+];
+
+/** Phrases that indicate ticket size alignment when present in strengths */
+const TICKET_SIZE_ALIGNMENT_PHRASES = [
+  "ticket size",
+  "ticket fit",
+  "amount within",
+  "within range",
+  "ticket alignment",
+  "funding amount",
+  "investment size",
+  "ticket size alignment",
+];
+
+function strengthsMentionAlignment(strengths: string[], phrases: string[]): boolean {
+  const strengthsText = strengths.join(" ").toLowerCase();
+  return phrases.some((p) => strengthsText.includes(p.toLowerCase()));
+}
+
+/**
+ * Compute structured scores directly from evaluation content using simple rules.
+ * - sectorFit = 25 if strengths mention sector alignment, else 0
+ * - geographyFit = 20 if strengths mention geography alignment, else 0
+ * - stageFit = 15 if strengths mention stage alignment, else 0
+ * - ticketSizeFit = 15 if strengths mention ticket size alignment, else 0
+ * - riskAdjustment = subtract points based on number/severity of risks (-20 to 0)
+ */
+export function computeScoresFromEvaluationContent(
+  content: EvaluationContentForInference
+): StructuredScores {
+  const strengths = content.strengths || [];
+  const risks = content.risks || [];
+
+  return {
+    sectorFit: strengthsMentionAlignment(strengths, SECTOR_ALIGNMENT_PHRASES)
+      ? SCORE_WEIGHTS.sectorFit
+      : 0,
+    geographyFit: strengthsMentionAlignment(strengths, GEOGRAPHY_ALIGNMENT_PHRASES)
+      ? SCORE_WEIGHTS.geographyFit
+      : 0,
+    stageFit: strengthsMentionAlignment(strengths, STAGE_ALIGNMENT_PHRASES)
+      ? SCORE_WEIGHTS.stageFit
+      : 0,
+    ticketSizeFit: strengthsMentionAlignment(strengths, TICKET_SIZE_ALIGNMENT_PHRASES)
+      ? SCORE_WEIGHTS.ticketSizeFit
+      : 0,
+    riskAdjustment: calculateRiskAdjustment(risks),
+  };
+}
+
+/**
+ * Compute full scoring result from evaluation content using simple rules.
+ */
+export function computeScoringFromEvaluationContent(
+  content: EvaluationContentForInference
+): ScoringResult {
+  const structuredScores = computeScoresFromEvaluationContent(content);
+  const finalScore = calculateFinalScore(structuredScores);
+
+  return {
+    structuredScores,
+    finalScore,
+    scoringMethod: "structured",
+    breakdown: {
+      sectorFit: structuredScores.sectorFit,
+      geographyFit: structuredScores.geographyFit,
+      stageFit: structuredScores.stageFit,
+      ticketSizeFit: structuredScores.ticketSizeFit,
+      riskAdjustment: structuredScores.riskAdjustment,
+      total: finalScore,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Safe Parsing
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -469,7 +551,6 @@ export function createFallbackScoring(rawScore: number): ScoringResult {
     finalScore: normalizedScore,
     scoringMethod: "fallback",
     breakdown: {
-      baseScore: BASE_SCORE,
       sectorFit: structuredScores.sectorFit,
       geographyFit: structuredScores.geographyFit,
       stageFit: structuredScores.stageFit,
@@ -489,12 +570,12 @@ export function createFallbackScoring(rawScore: number): ScoringResult {
  *
  * Priority:
  * 1. Use LLM-provided scoringInput if valid
- * 2. Infer signals from evaluation content if provided
+ * 2. Compute from evaluation content using simple rules (strengths-based) if provided
  * 3. Fall back to raw AI score
  *
  * @param scoringInput - Parsed scoring input from LLM (may be null)
  * @param rawScore - Raw AI score to use as fallback
- * @param evaluationContent - Optional evaluation content for signal inference when scoringInput is null
+ * @param evaluationContent - Optional evaluation content for direct score computation when scoringInput is null
  * @returns Scoring result with structured scores
  */
 export function computeScoringSafe(
@@ -515,17 +596,16 @@ export function computeScoringSafe(
     }
   }
 
-  // 2. Try inferring signals from evaluation content
+  // 2. Compute from evaluation content using simple rules (strengths mention alignment → full points)
   if (evaluationContent) {
     try {
-      const inferredInput = inferSignalsFromEvaluation(evaluationContent);
-      const result = computeScoring(inferredInput);
+      const result = computeScoringFromEvaluationContent(evaluationContent);
       console.log(
-        `[scoringModel] Structured scoring (inferred): finalScore=${result.finalScore}, method=${result.scoringMethod}`
+        `[scoringModel] Structured scoring (evaluation content): finalScore=${result.finalScore}, method=${result.scoringMethod}`
       );
       return result;
     } catch (error) {
-      console.error("[scoringModel] Inferred scoring failed:", error);
+      console.error("[scoringModel] Evaluation content scoring failed:", error);
     }
   }
 
