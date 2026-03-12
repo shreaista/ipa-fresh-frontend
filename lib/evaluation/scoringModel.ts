@@ -53,6 +53,15 @@ export interface ScoringInput {
   identifiedRisks: string[];
 }
 
+/** Evaluation content used to infer scoring signals when LLM does not provide them */
+export interface EvaluationContentForInference {
+  proposalSummary: string;
+  mandateSummary: string;
+  strengths: string[];
+  risks: string[];
+  recommendations: string[];
+}
+
 export interface ScoringResult {
   structuredScores: StructuredScores;
   finalScore: number;
@@ -191,6 +200,222 @@ export function computeScoring(input: ScoringInput): ScoringResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Signal Inference from Evaluation Content
+// ─────────────────────────────────────────────────────────────────────────────
+
+type MatchLevel = "full" | "partial" | "none" | "unknown";
+
+function normalizeForMatch(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ");
+}
+
+function textContainsAny(text: string, terms: string[]): boolean {
+  const normalized = normalizeForMatch(text);
+  return terms.some((t) => normalized.includes(t.toLowerCase()));
+}
+
+/**
+ * Infer sectorMatch from evaluation content.
+ * Full: strengths mention sector alignment.
+ * Partial: strengths mention sector but with caveats.
+ * None: risks mention sector mismatch.
+ */
+function inferSectorMatch(content: EvaluationContentForInference): MatchLevel {
+  const strengthsText = content.strengths.join(" ").toLowerCase();
+  const risksText = content.risks.join(" ").toLowerCase();
+
+  if (
+    textContainsAny(strengthsText, [
+      "sector alignment",
+      "sector fit",
+      "industry alignment",
+      "sector match",
+      "strong sector",
+      "sector aligns",
+      "mandate sector",
+    ])
+  ) {
+    return "full";
+  }
+  if (
+    textContainsAny(risksText, [
+      "sector mismatch",
+      "sector misalignment",
+      "outside sector",
+      "sector concern",
+    ])
+  ) {
+    return "none";
+  }
+  if (
+    textContainsAny(strengthsText, ["sector", "industry", "vertical"]) ||
+    textContainsAny(content.proposalSummary, ["sector", "industry"])
+  ) {
+    return "partial";
+  }
+  return "unknown";
+}
+
+/**
+ * Infer geographyMatch from evaluation content.
+ * Full: proposal geography matches mandate.
+ */
+function inferGeographyMatch(content: EvaluationContentForInference): MatchLevel {
+  const proposal = normalizeForMatch(content.proposalSummary);
+  const mandate = normalizeForMatch(content.mandateSummary);
+  const strengthsText = content.strengths.join(" ").toLowerCase();
+  const risksText = content.risks.join(" ").toLowerCase();
+
+  const regions = [
+    "north america",
+    "europe",
+    "asia",
+    "latin america",
+    "emea",
+    "apac",
+    "us",
+    "usa",
+    "united states",
+    "uk",
+    "germany",
+    "france",
+  ];
+
+  const proposalRegions = regions.filter((r) => proposal.includes(r));
+  const mandateRegions = regions.filter((r) => mandate.includes(r));
+
+  if (proposalRegions.length > 0 && mandateRegions.length > 0) {
+    const overlap = proposalRegions.some((r) => mandateRegions.includes(r));
+    if (overlap) return "full";
+  }
+
+  if (
+    textContainsAny(strengthsText, [
+      "geography",
+      "geographic",
+      "region",
+      "geographic fit",
+      "geography match",
+    ])
+  ) {
+    return "full";
+  }
+  if (
+    textContainsAny(risksText, [
+      "geography",
+      "geographic",
+      "region",
+      "outside mandate geography",
+    ])
+  ) {
+    return "none";
+  }
+  return "unknown";
+}
+
+/**
+ * Infer stageMatch from evaluation content.
+ * Full: proposal stage matches mandate.
+ */
+function inferStageMatch(content: EvaluationContentForInference): MatchLevel {
+  const proposal = normalizeForMatch(content.proposalSummary);
+  const mandate = normalizeForMatch(content.mandateSummary);
+  const strengthsText = content.strengths.join(" ").toLowerCase();
+  const risksText = content.risks.join(" ").toLowerCase();
+
+  const stages = [
+    "seed",
+    "pre-seed",
+    "series a",
+    "series b",
+    "series c",
+    "growth",
+    "early stage",
+    "late stage",
+  ];
+
+  const proposalStages = stages.filter((s) => proposal.includes(s));
+  const mandateStages = stages.filter((s) => mandate.includes(s));
+
+  if (proposalStages.length > 0 && mandateStages.length > 0) {
+    const overlap = proposalStages.some((s) => mandateStages.includes(s));
+    if (overlap) return "full";
+  }
+
+  if (
+    textContainsAny(strengthsText, [
+      "stage fit",
+      "stage alignment",
+      "stage match",
+      "investment stage",
+    ])
+  ) {
+    return "full";
+  }
+  if (
+    textContainsAny(risksText, [
+      "stage mismatch",
+      "stage concern",
+      "outside stage",
+    ])
+  ) {
+    return "none";
+  }
+  return "unknown";
+}
+
+/**
+ * Infer ticketSizeMatch from evaluation content.
+ * Full: ticket size inside mandate range.
+ */
+function inferTicketSizeMatch(content: EvaluationContentForInference): MatchLevel {
+  const strengthsText = content.strengths.join(" ").toLowerCase();
+  const risksText = content.risks.join(" ").toLowerCase();
+
+  if (
+    textContainsAny(strengthsText, [
+      "ticket size",
+      "ticket fit",
+      "amount within",
+      "within range",
+      "ticket alignment",
+      "funding amount",
+      "investment size",
+    ])
+  ) {
+    return "full";
+  }
+  if (
+    textContainsAny(risksText, [
+      "ticket size",
+      "amount",
+      "over ask",
+      "under ask",
+      "outside range",
+    ])
+  ) {
+    return "partial";
+  }
+  return "unknown";
+}
+
+/**
+ * Infer structured signals from evaluation content.
+ * Used when LLM does not provide scoringInput.
+ */
+export function inferSignalsFromEvaluation(
+  content: EvaluationContentForInference
+): ScoringInput {
+  return {
+    sectorMatch: inferSectorMatch(content),
+    geographyMatch: inferGeographyMatch(content),
+    stageMatch: inferStageMatch(content),
+    ticketSizeMatch: inferTicketSizeMatch(content),
+    identifiedRisks: content.risks || [],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Safe Parsing
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -262,26 +487,49 @@ export function createFallbackScoring(rawScore: number): ScoringResult {
 /**
  * Compute scoring safely, falling back to raw score if structured scoring fails.
  *
+ * Priority:
+ * 1. Use LLM-provided scoringInput if valid
+ * 2. Infer signals from evaluation content if provided
+ * 3. Fall back to raw AI score
+ *
  * @param scoringInput - Parsed scoring input from LLM (may be null)
  * @param rawScore - Raw AI score to use as fallback
+ * @param evaluationContent - Optional evaluation content for signal inference when scoringInput is null
  * @returns Scoring result with structured scores
  */
 export function computeScoringSafe(
   scoringInput: ScoringInput | null,
-  rawScore: number
+  rawScore: number,
+  evaluationContent?: EvaluationContentForInference
 ): ScoringResult {
+  // 1. Try LLM-provided scoring input
   if (scoringInput) {
     try {
       const result = computeScoring(scoringInput);
       console.log(
-        `[scoringModel] Structured scoring computed: finalScore=${result.finalScore}, method=${result.scoringMethod}`
+        `[scoringModel] Structured scoring (LLM): finalScore=${result.finalScore}, method=${result.scoringMethod}`
       );
       return result;
     } catch (error) {
-      console.error("[scoringModel] Structured scoring failed:", error);
+      console.error("[scoringModel] LLM scoring failed:", error);
     }
   }
 
+  // 2. Try inferring signals from evaluation content
+  if (evaluationContent) {
+    try {
+      const inferredInput = inferSignalsFromEvaluation(evaluationContent);
+      const result = computeScoring(inferredInput);
+      console.log(
+        `[scoringModel] Structured scoring (inferred): finalScore=${result.finalScore}, method=${result.scoringMethod}`
+      );
+      return result;
+    } catch (error) {
+      console.error("[scoringModel] Inferred scoring failed:", error);
+    }
+  }
+
+  // 3. Fall back to raw AI score
   console.log(
     `[scoringModel] Using fallback scoring from raw AI score: ${rawScore}`
   );

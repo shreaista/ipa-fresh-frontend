@@ -477,11 +477,19 @@ export async function runEvaluation(
       // engineType is "azure-openai" when using Azure, "llm" for standard OpenAI
       const engineType = llmResult.provider === "azure-openai" ? "azure-openai" : "llm";
 
-      // Parse scoring input from LLM response and compute structured scores
+      // Parse scoring input from LLM response; infer from evaluation content if LLM did not provide it
       const scoringInput = parseScoringInput(llmResult.response.scoringInput);
+      const evaluationContent = {
+        proposalSummary: llmResult.response.proposalSummary,
+        mandateSummary: llmResult.response.mandateSummary,
+        strengths: llmResult.response.strengths,
+        risks: llmResult.response.risks,
+        recommendations: llmResult.response.recommendations,
+      };
       const scoringResult: ScoringResult = computeScoringSafe(
         scoringInput,
-        llmResult.response.fitScore
+        llmResult.response.fitScore,
+        evaluationContent
       );
 
       // Use structured final score if structured scoring succeeded, otherwise use LLM score
