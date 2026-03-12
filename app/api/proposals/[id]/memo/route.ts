@@ -146,6 +146,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
 
     console.log("[memo.route] Memo generated successfully:", memoId);
+    console.log("[memo.route] memo generated");
 
     return NextResponse.json({
       ok: true,
@@ -217,6 +218,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     // If blobPath is provided, download specific memo
     if (blobPath) {
+      console.log("[memo.route] memo download requested");
       const result = await downloadMemo(tenantId, id, blobPath);
       
       if (!result) {
@@ -242,11 +244,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
     // Otherwise, list all memos
     const memos = await listMemos(tenantId, id);
 
+    const latest = memos[0] ?? null;
+    const latestMemoMetadata = latest
+      ? {
+          latestMemoFileName: latest.fileName,
+          latestMemoGeneratedAt: latest.generatedAt,
+          latestMemoBlobPath: latest.blobPath,
+        }
+      : null;
+
+    console.log("[memo.route] latest memo loaded");
+    console.log("[memo.route] memo history count:", memos.length);
+
     return NextResponse.json({
       ok: true,
       data: {
         memos,
         count: memos.length,
+        memoCount: memos.length,
+        latestMemoFileName: latestMemoMetadata?.latestMemoFileName ?? null,
+        latestMemoGeneratedAt: latestMemoMetadata?.latestMemoGeneratedAt ?? null,
+        latestMemoBlobPath: latestMemoMetadata?.latestMemoBlobPath ?? null,
       },
     });
   } catch (error) {

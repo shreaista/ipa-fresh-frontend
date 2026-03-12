@@ -59,6 +59,7 @@ export interface MemoMetadata {
   generatedAt: string;
   fitScore: number | null;
   format: "pdf" | "text";
+  fileName: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -680,6 +681,7 @@ export async function uploadMemoPDF(
   });
 
   console.log(`[memoGenerator] Memo PDF saved: ${blobPath}`);
+  console.log("[memoGenerator] memo generated");
 
   return { blobPath, memoId };
 }
@@ -701,6 +703,7 @@ export async function listMemos(
     const match = blob.path.match(/memos\/(\d{8}T\d{6}Z)\//);
     const memoId = match ? match[1] : "";
     const format = blob.path.endsWith(".pdf") ? "pdf" : "text";
+    const fileName = blob.path.split("/").pop() || `investment_memo.${format}`;
 
     memos.push({
       blobPath: blob.path,
@@ -708,6 +711,7 @@ export async function listMemos(
       generatedAt: blob.lastModified || "",
       fitScore: null, // Could be extracted from metadata if needed
       format,
+      fileName,
     });
   }
 
@@ -718,6 +722,11 @@ export async function listMemos(
     return dateB - dateA;
   });
 
+  if (memos.length > 0) {
+    console.log("[memoGenerator] latest memo loaded");
+  }
+  console.log("[memoGenerator] memo history count:", memos.length);
+
   return memos;
 }
 
@@ -726,6 +735,8 @@ export async function downloadMemo(
   proposalId: string,
   blobPath: string
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
+  console.log("[memoGenerator] memo download requested");
+
   if (!validateMemoBlobPath(blobPath, tenantId, proposalId)) {
     return null;
   }

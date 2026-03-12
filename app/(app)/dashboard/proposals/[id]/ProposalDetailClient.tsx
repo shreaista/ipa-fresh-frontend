@@ -147,6 +147,14 @@ interface EvaluationMetadata {
   };
 }
 
+interface MemoMetadata {
+  blobPath: string;
+  memoId: string;
+  generatedAt: string;
+  fileName: string;
+  format: "pdf" | "text";
+}
+
 // NEW: Types for proposal documents
 interface ProposalDocumentBlob {
   blobPath: string;
@@ -516,25 +524,39 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
   // Memo generation state
   const [generatingMemo, setGeneratingMemo] = useState(false);
-  const [latestMemoPath, setLatestMemoPath] = useState<string | null>(null);
+  const [memos, setMemos] = useState<MemoMetadata[]>([]);
+  const [latestMemoBlobPath, setLatestMemoBlobPath] = useState<string | null>(null);
+  const [latestMemoFileName, setLatestMemoFileName] = useState<string | null>(null);
+  const [latestMemoGeneratedAt, setLatestMemoGeneratedAt] = useState<string | null>(null);
+  const [memoCount, setMemoCount] = useState(0);
   const [memoMessage, setMemoMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Load memos on mount
-  useEffect(() => {
-    const loadMemos = async () => {
-      if (!proposal?.id) return;
-      try {
-        const res = await fetch(`/api/proposals/${proposal.id}/memo`);
-        const data = await res.json();
-        if (data.ok && data.data.memos.length > 0) {
-          setLatestMemoPath(data.data.memos[0].blobPath);
-        }
-      } catch {
-        console.error("Failed to load memos");
+  // Load memos on mount and when proposal changes
+  const loadMemos = useCallback(async (proposalId?: string) => {
+    const id = proposalId || proposal?.id;
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/proposals/${id}/memo`);
+      const data = await res.json();
+      if (data.ok) {
+        const memoList = data.data.memos || [];
+        setMemos(memoList);
+        setMemoCount(data.data.memoCount ?? memoList.length);
+        setLatestMemoBlobPath(data.data.latestMemoBlobPath ?? memoList[0]?.blobPath ?? null);
+        setLatestMemoFileName(data.data.latestMemoFileName ?? memoList[0]?.fileName ?? null);
+        setLatestMemoGeneratedAt(data.data.latestMemoGeneratedAt ?? memoList[0]?.generatedAt ?? null);
       }
-    };
-    loadMemos();
+    } catch {
+      console.error("Failed to load memos");
+    }
   }, [proposal?.id]);
+
+  useEffect(() => {
+    const id = proposal?.id;
+    if (id) {
+      queueMicrotask(() => { loadMemos(id); });
+    }
+  }, [proposal?.id, loadMemos]);
 
   // Generate investment memo
   const handleGenerateMemo = async () => {
@@ -550,11 +572,11 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
       const data = await res.json();
 
       if (data.ok) {
-        setLatestMemoPath(data.data.blobPath);
         setMemoMessage({
           text: "Investment memo generated successfully",
           type: "success",
         });
+        await loadMemos();
       } else {
         setMemoMessage({ text: data.error || "Failed to generate memo", type: "error" });
       }
@@ -565,11 +587,13 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
     setGeneratingMemo(false);
   };
 
-  // Download memo
-  const handleDownloadMemo = () => {
-    if (!proposal || !latestMemoPath) return;
+  // Download memo (latest by default, or specific blobPath for history)
+  const handleDownloadMemo = (blobPath?: string) => {
+    if (!proposal) return;
+    const path = blobPath ?? latestMemoBlobPath;
+    if (!path) return;
     window.open(
-      `/api/proposals/${proposal.id}/memo?blobPath=${encodeURIComponent(latestMemoPath)}`,
+      `/api/proposals/${proposal.id}/memo?blobPath=${encodeURIComponent(path)}`,
       "_blank"
     );
   };
@@ -1347,7 +1371,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               variant="outline"
               size="sm"
               onClick={async () => {
-                await Promise.all([loadEvaluations(), loadDocuments()]);
+                await Promise.all([loadEvaluations(), loadDocuments(), loadMemos()]);
               }}
               disabled={evaluationsLoading || loading}
             >
@@ -1388,11 +1412,11 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                   )}
                   Generate Memo
                 </Button>
-                {latestMemoPath && (
+                {latestMemoBlobPath && (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={handleDownloadMemo}
+                    onClick={() => handleDownloadMemo()}
                     className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                   >
                     <Download className="h-4 w-4 mr-1" />
@@ -1522,6 +1546,64 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               <div className="px-5 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-emerald-600" />
                 <span className="text-sm text-emerald-700">Showing latest evaluation</span>
+              </div>
+            )}
+
+            {/* Memo Status section */}
+            {(latestMemoBlobPath || memoCount > 0) && (
+              <div className="px-5 py-3 border-b bg-muted/5">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Memo Status</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  {latestMemoFileName && (
+                    <span className="flex items-center gap-1.5">
+                      <FileOutput className="h-3.5 w-3.5 text-muted-foreground" />
+                      {latestMemoFileName}
+                    </span>
+                  )}
+                  {latestMemoGeneratedAt && (
+                    <span className="text-muted-foreground">
+                      {formatDate(latestMemoGeneratedAt)}
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">
+                    {memoCount} memo{memoCount !== 1 ? "s" : ""} available
+                  </span>
+                </div>
+                {/* Memo history when more than one */}
+                {memos.length > 1 && (
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Memo History</p>
+                    <div className="space-y-1.5">
+                      {memos.map((m, i) => (
+                        <div
+                          key={m.blobPath}
+                          className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/30 group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-muted-foreground text-xs shrink-0">
+                              {formatDate(m.generatedAt)}
+                            </span>
+                            <span className="text-sm truncate">{m.fileName}</span>
+                            {i === 0 && (
+                              <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shrink-0">
+                                Latest
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            onClick={() => handleDownloadMemo(m.blobPath)}
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1" />
+                            Download
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
