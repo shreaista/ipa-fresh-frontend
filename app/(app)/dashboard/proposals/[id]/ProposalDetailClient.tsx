@@ -153,6 +153,8 @@ interface MemoMetadata {
   generatedAt: string;
   fileName: string;
   format: "pdf" | "text";
+  versionNumber?: number;
+  isLatest?: boolean;
 }
 
 // NEW: Types for proposal documents
@@ -1569,12 +1571,12 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     {memoCount} memo{memoCount !== 1 ? "s" : ""} available
                   </span>
                 </div>
-                {/* Memo history when more than one */}
-                {memos.length > 1 && (
+                {/* Memo History */}
+                {memos.length > 0 && (
                   <div className="mt-3 pt-3 border-t">
                     <p className="text-xs font-medium text-muted-foreground mb-2">Memo History</p>
                     <div className="space-y-1.5">
-                      {memos.map((m, i) => (
+                      {memos.map((m) => (
                         <div
                           key={m.blobPath}
                           className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/30 group"
@@ -1583,8 +1585,10 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                             <span className="text-muted-foreground text-xs shrink-0">
                               {formatDate(m.generatedAt)}
                             </span>
-                            <span className="text-sm truncate">{m.fileName}</span>
-                            {i === 0 && (
+                            <span className="text-sm truncate" title={m.fileName}>
+                              {m.fileName}
+                            </span>
+                            {m.isLatest && (
                               <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shrink-0">
                                 Latest
                               </span>

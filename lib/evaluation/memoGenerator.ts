@@ -60,6 +60,8 @@ export interface MemoMetadata {
   fitScore: number | null;
   format: "pdf" | "text";
   fileName: string;
+  versionNumber: number;
+  isLatest: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,7 +74,8 @@ function generateMemoId(): string {
 
 function buildMemoPath(tenantId: string, proposalId: string, memoId: string, format: "pdf" | "text"): string {
   const extension = format === "pdf" ? "pdf" : "txt";
-  return `tenants/${tenantId}/proposals/${proposalId}/memos/${memoId}/investment_memo.${extension}`;
+  const fileName = `investment_memo_${proposalId}_${memoId}.${extension}`;
+  return `tenants/${tenantId}/proposals/${proposalId}/memos/${fileName}`;
 }
 
 function getMemosPrefix(tenantId: string, proposalId: string): string {
@@ -85,7 +88,15 @@ export function validateMemoBlobPath(
   proposalId: string
 ): boolean {
   const expectedPrefix = `tenants/${tenantId}/proposals/${proposalId}/memos/`;
-  return blobPath.startsWith(expectedPrefix) && (blobPath.endsWith(".pdf") || blobPath.endsWith(".txt"));
+  if (!blobPath.startsWith(expectedPrefix) || (!blobPath.endsWith(".pdf") && !blobPath.endsWith(".txt"))) {
+    return false;
+  }
+  // New format: memos/investment_memo_<proposalId>_<timestamp>.pdf
+  // Old format: memos/<memoId>/investment_memo.pdf (backward compat)
+  const afterPrefix = blobPath.slice(expectedPrefix.length);
+  const isNewFormat = /^investment_memo_.+_\d{8}T\d{6}Z\.(pdf|txt)$/.test(afterPrefix);
+  const isOldFormat = /^\d{8}T\d{6}Z\/investment_memo\.(pdf|txt)$/.test(afterPrefix);
+  return isNewFormat || isOldFormat;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -700,18 +711,29 @@ export async function listMemos(
   for (const blob of blobs) {
     if (!blob.path.endsWith(".pdf") && !blob.path.endsWith(".txt")) continue;
 
-    const match = blob.path.match(/memos\/(\d{8}T\d{6}Z)\//);
-    const memoId = match ? match[1] : "";
     const format = blob.path.endsWith(".pdf") ? "pdf" : "text";
-    const fileName = blob.path.split("/").pop() || `investment_memo.${format}`;
+    const pathParts = blob.path.split("/");
+    const lastPart = pathParts[pathParts.length - 1] ?? "";
+
+    // New format: investment_memo_<proposalId>_<timestamp>.pdf
+    const newFormatMatch = lastPart.match(/^investment_memo_.+_(\d{8}T\d{6}Z)\.(pdf|txt)$/);
+    // Old format: memos/<memoId>/investment_memo.pdf
+    const oldFormatMatch = blob.path.match(/memos\/(\d{8}T\d{6}Z)\//);
+
+    const memoId = newFormatMatch ? newFormatMatch[1] : (oldFormatMatch ? oldFormatMatch[1] : "");
+    const fileName = newFormatMatch
+      ? lastPart
+      : (oldFormatMatch ? `investment_memo_${proposalId}_${memoId}.${format}` : `investment_memo.${format}`);
 
     memos.push({
       blobPath: blob.path,
       memoId,
       generatedAt: blob.lastModified || "",
-      fitScore: null, // Could be extracted from metadata if needed
+      fitScore: null,
       format,
       fileName,
+      versionNumber: 0, // Set after sort
+      isLatest: false, // Set after sort
     });
   }
 
@@ -720,6 +742,12 @@ export async function listMemos(
     const dateA = new Date(a.generatedAt).getTime() || 0;
     const dateB = new Date(b.generatedAt).getTime() || 0;
     return dateB - dateA;
+  });
+
+  // Assign versionNumber (1 = newest) and isLatest
+  memos.forEach((m, i) => {
+    m.versionNumber = i + 1;
+    m.isLatest = i === 0;
   });
 
   if (memos.length > 0) {

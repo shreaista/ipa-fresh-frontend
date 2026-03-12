@@ -225,8 +225,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
         throw new AuthzHttpError(404, "Memo not found");
       }
 
-      // Extract filename from path
-      const filename = `investment_memo_${id}.pdf`;
+      // Use actual filename from blob path (e.g. investment_memo_<proposalId>_<timestamp>.pdf)
+      const filename = blobPath.split("/").pop() || `investment_memo_${id}.pdf`;
 
       // Convert Buffer to Uint8Array for NextResponse compatibility
       const uint8Array = new Uint8Array(result.buffer);
