@@ -37,6 +37,9 @@ export interface ExtractedContent {
   totalCharacters: number;
   extractionWarnings: string[];
   documentStats: DocumentProcessingStats;
+  // Chunk metadata (optional for backwards compatibility)
+  proposalChunksUsed?: number;
+  mandateChunksUsed?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,6 +172,13 @@ export async function extractContentForEvaluation(
     `[textExtraction] Document stats - processed: ${prepared.totalStats.processedDocumentsCount}, truncated: ${prepared.totalStats.truncatedDocumentsCount}, skipped: ${prepared.totalStats.skippedDocumentsCount}`
   );
 
+  // Log chunk stats if available
+  if (prepared.proposalChunksUsed !== undefined || prepared.mandateChunksUsed !== undefined) {
+    console.log(
+      `[textExtraction] Chunks used - mandate: ${prepared.mandateChunksUsed ?? 0}, proposal: ${prepared.proposalChunksUsed ?? 0}`
+    );
+  }
+
   if (prepared.allWarnings.length > 0) {
     console.log(`[textExtraction] All warnings: ${prepared.allWarnings.length}`);
   }
@@ -179,5 +189,7 @@ export async function extractContentForEvaluation(
     totalCharacters: totalChars,
     extractionWarnings: prepared.allWarnings,
     documentStats: prepared.totalStats,
+    proposalChunksUsed: prepared.proposalChunksUsed,
+    mandateChunksUsed: prepared.mandateChunksUsed,
   };
 }

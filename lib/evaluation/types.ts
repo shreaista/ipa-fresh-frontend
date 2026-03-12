@@ -39,6 +39,9 @@ export const EvaluationReportSchema = z.object({
     processedDocumentsCount: z.number().optional(),
     truncatedDocumentsCount: z.number().optional(),
     skippedDocumentsCount: z.number().optional(),
+    // Chunk-based processing stats (optional for backwards compatibility)
+    proposalChunksUsed: z.number().optional(),
+    mandateChunksUsed: z.number().optional(),
     // RAG matching metadata (optional for backwards compatibility)
     matchedSectionsCount: z.number().optional(),
     topMandateSectionsPreview: z.string().optional(),

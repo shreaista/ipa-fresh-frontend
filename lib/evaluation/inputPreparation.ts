@@ -7,10 +7,15 @@ import "server-only";
 //
 // Features:
 // - Prioritizes newest documents first (by uploadedAt timestamp)
+// - Uses chunk-based processing for better content preservation
 // - Enforces total character limit while preserving useful content
 // - Tracks processed, truncated, and skipped documents
 
 import { MAX_TOTAL_CHARS, MAX_CHARS_PER_DOC } from "./types";
+import {
+  prepareChunkedEvaluationInputSafe,
+  type DocumentInput as ChunkDocumentInput,
+} from "./chunking";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -186,6 +191,7 @@ export function prepareDocumentInputs(
 
 /**
  * Prepares both mandate and proposal documents for evaluation.
+ * Uses chunk-based processing for better content preservation.
  * Splits the character budget: 40% for mandate, 60% for proposal.
  *
  * @param mandateDocs Mandate template documents
@@ -194,6 +200,91 @@ export function prepareDocumentInputs(
  * @returns Combined prepared inputs for both document sets
  */
 export function prepareEvaluationInputs(
+  mandateDocs: DocumentInput[],
+  proposalDocs: DocumentInput[],
+  totalBudget: number = MAX_TOTAL_CHARS
+): {
+  mandateInput: PreparedInput;
+  proposalInput: PreparedInput;
+  totalStats: DocumentProcessingStats;
+  allWarnings: string[];
+  // Chunk metadata (new)
+  proposalChunksUsed?: number;
+  mandateChunksUsed?: number;
+} {
+  // Convert DocumentInput to ChunkDocumentInput format
+  const toChunkInput = (doc: DocumentInput): ChunkDocumentInput => ({
+    filename: doc.filename,
+    blobPath: doc.blobPath,
+    text: doc.text,
+    uploadedAt: doc.uploadedAt,
+    isPlaceholder: doc.isPlaceholder,
+    warning: doc.warning,
+  });
+
+  // Use chunk-based preparation (safe wrapper handles errors)
+  const chunkedResult = prepareChunkedEvaluationInputSafe(
+    mandateDocs.map(toChunkInput),
+    proposalDocs.map(toChunkInput),
+    totalBudget
+  );
+
+  // Build PreparedInput for mandate
+  const mandateInput: PreparedInput = {
+    combinedText: chunkedResult.mandateText || "No mandate content available.",
+    stats: {
+      processedDocumentsCount: Math.ceil(chunkedResult.processedDocumentsCount / 2),
+      truncatedDocumentsCount: Math.ceil(chunkedResult.truncatedDocumentsCount / 2),
+      skippedDocumentsCount: Math.ceil(chunkedResult.skippedDocumentsCount / 2),
+    },
+    warnings: chunkedResult.warnings.filter((w) => w.toLowerCase().includes("mandate")),
+    documents: mandateDocs.map((d) => ({
+      filename: d.filename,
+      status: d.isPlaceholder ? "skipped" as const : "processed" as const,
+      originalLength: d.text.length,
+      processedLength: d.text.length,
+    })),
+  };
+
+  // Build PreparedInput for proposal
+  const proposalInput: PreparedInput = {
+    combinedText: chunkedResult.proposalText || "No proposal content available.",
+    stats: {
+      processedDocumentsCount: Math.floor(chunkedResult.processedDocumentsCount / 2),
+      truncatedDocumentsCount: Math.floor(chunkedResult.truncatedDocumentsCount / 2),
+      skippedDocumentsCount: Math.floor(chunkedResult.skippedDocumentsCount / 2),
+    },
+    warnings: chunkedResult.warnings.filter((w) => w.toLowerCase().includes("proposal")),
+    documents: proposalDocs.map((d) => ({
+      filename: d.filename,
+      status: d.isPlaceholder ? "skipped" as const : "processed" as const,
+      originalLength: d.text.length,
+      processedLength: d.text.length,
+    })),
+  };
+
+  // Aggregate stats
+  const totalStats: DocumentProcessingStats = {
+    processedDocumentsCount: chunkedResult.processedDocumentsCount,
+    truncatedDocumentsCount: chunkedResult.truncatedDocumentsCount,
+    skippedDocumentsCount: chunkedResult.skippedDocumentsCount,
+  };
+
+  return {
+    mandateInput,
+    proposalInput,
+    totalStats,
+    allWarnings: chunkedResult.warnings,
+    proposalChunksUsed: chunkedResult.proposalChunksUsed,
+    mandateChunksUsed: chunkedResult.mandateChunksUsed,
+  };
+}
+
+/**
+ * Legacy function: Prepares both mandate and proposal documents using document-level truncation.
+ * Kept for backwards compatibility.
+ */
+export function prepareEvaluationInputsLegacy(
   mandateDocs: DocumentInput[],
   proposalDocs: DocumentInput[],
   totalBudget: number = MAX_TOTAL_CHARS

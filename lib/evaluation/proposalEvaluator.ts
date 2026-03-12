@@ -489,6 +489,9 @@ export async function runEvaluation(
           processedDocumentsCount: extractedContent.documentStats.processedDocumentsCount,
           truncatedDocumentsCount: extractedContent.documentStats.truncatedDocumentsCount,
           skippedDocumentsCount: extractedContent.documentStats.skippedDocumentsCount,
+          // Chunk-based processing stats
+          proposalChunksUsed: extractedContent.proposalChunksUsed,
+          mandateChunksUsed: extractedContent.mandateChunksUsed,
           // RAG matching metadata
           matchedSectionsCount: ragEvalInput.matchedSectionsCount,
           topMandateSectionsPreview: ragEvalInput.topMandateSectionsPreview,
@@ -545,6 +548,9 @@ export async function runEvaluation(
           processedDocumentsCount: extractedContent.documentStats.processedDocumentsCount,
           truncatedDocumentsCount: extractedContent.documentStats.truncatedDocumentsCount,
           skippedDocumentsCount: extractedContent.documentStats.skippedDocumentsCount,
+          // Chunk-based processing stats
+          proposalChunksUsed: extractedContent.proposalChunksUsed,
+          mandateChunksUsed: extractedContent.mandateChunksUsed,
           // RAG matching metadata (even on fallback)
           matchedSectionsCount: ragEvalInput.matchedSectionsCount,
           topMandateSectionsPreview: ragEvalInput.topMandateSectionsPreview,
