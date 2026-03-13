@@ -157,12 +157,17 @@ const SEED_FUND_IDS = new Set([
 // Fund CRUD Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function listFunds(tenantId: string): Fund[] {
-  const filtered = funds.filter((f) => f.tenantId === tenantId);
+/** Returns funds visible for the given tenant (same scope used by list and create). */
+function getVisibleFundsForTenant(tenantId: string): Fund[] {
+  const byTenant = funds.filter((f) => f.tenantId === tenantId);
   if (productionMode) {
-    return filtered.filter((f) => !SEED_FUND_IDS.has(f.id));
+    return byTenant.filter((f) => !SEED_FUND_IDS.has(f.id));
   }
-  return filtered;
+  return byTenant;
+}
+
+export function listFunds(tenantId: string): Fund[] {
+  return getVisibleFundsForTenant(tenantId);
 }
 
 export function getFundById(tenantId: string, fundId: string): Fund | undefined {
@@ -183,8 +188,10 @@ export function createFund(
     return { ok: false, error: "Fund name is required" };
   }
 
-  const existingFund = funds.find(
-    (f) => f.tenantId === tenantId && f.name.toLowerCase() === input.name.toLowerCase()
+  // Use same visible scope as listFunds so create/check and list are aligned
+  const visibleFunds = getVisibleFundsForTenant(tenantId);
+  const existingFund = visibleFunds.find(
+    (f) => f.name.toLowerCase() === input.name.trim().toLowerCase()
   );
   if (existingFund) {
     return { ok: false, error: "A fund with this name already exists" };
