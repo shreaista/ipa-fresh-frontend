@@ -171,18 +171,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(400, "File cannot be empty");
     }
 
-    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
     const allowedContentTypes = [
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ];
     const extension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
     const isValidExtension = allowedExtensions.includes(extension);
     const isValidContentType = allowedContentTypes.includes(file.type);
 
     if (!isValidExtension && !isValidContentType) {
-      throw new AuthzHttpError(400, "Only PDF, DOC, and DOCX files are supported.");
+      throw new AuthzHttpError(400, "Only PDF, DOC, DOCX, XLS, and XLSX files are supported.");
     }
 
     if (!fundId) {

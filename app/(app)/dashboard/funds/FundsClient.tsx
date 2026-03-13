@@ -325,11 +325,11 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
     if (!file) return;
 
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
     if (!allowedExtensions.includes(ext)) {
       setUploadMessage({
         id: mandateId,
-        message: "Only PDF, DOC, and DOCX files are supported.",
+        message: "Only PDF, DOC, DOCX, XLS, and XLSX files are supported.",
         type: "error",
       });
       const input = fileInputRefs.current.get(mandateId);
@@ -821,7 +821,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                           <div className="flex items-center gap-2">
                             <input
                               type="file"
-                              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                               className="hidden"
                               ref={(el) => {
                                 if (el) fileInputRefs.current.set(mandate.id, el);
@@ -1016,17 +1016,17 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                     <div className="flex flex-col items-end">
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         className="hidden"
                         ref={blobFileInputRef}
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
                             const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-                            const allowedExtensions = [".pdf", ".doc", ".docx"];
+                            const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
                             if (!allowedExtensions.includes(ext)) {
                               setBlobUploadMessage({
-                                message: "Only PDF, DOC, and DOCX files are supported.",
+                                message: "Only PDF, DOC, DOCX, XLS, and XLSX files are supported.",
                                 type: "error",
                               });
                               if (blobFileInputRef.current) blobFileInputRef.current.value = "";
@@ -1066,7 +1066,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Supported formats: PDF, DOC, DOCX (max 25MB)
+                    Supported formats: PDF, DOC, DOCX, XLS, XLSX (max 25MB)
                   </p>
                 </div>
                 {blobMandates.length === 0 ? (

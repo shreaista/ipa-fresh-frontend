@@ -49,11 +49,15 @@ function getDisplayContentType(blob: FundMandateBlob): string {
     if (blob.contentType.includes("pdf")) return "PDF";
     if (blob.contentType.includes("word")) return "DOCX";
     if (blob.contentType.includes("msword")) return "DOC";
+    if (blob.contentType.includes("spreadsheetml")) return "XLSX";
+    if (blob.contentType.includes("ms-excel")) return "XLS";
   }
   const filename = getDisplayFileName(blob).toLowerCase();
   if (filename.endsWith(".pdf")) return "PDF";
   if (filename.endsWith(".docx")) return "DOCX";
   if (filename.endsWith(".doc")) return "DOC";
+  if (filename.endsWith(".xlsx")) return "XLSX";
+  if (filename.endsWith(".xls")) return "XLS";
   return "FILE";
 }
 
@@ -121,9 +125,9 @@ export default function MandatesClient() {
     }
 
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
     if (!allowedExtensions.includes(ext)) {
-      setMessage({ text: "Only PDF, DOC, and DOCX files are supported.", type: "error" });
+      setMessage({ text: "Only PDF, DOC, DOCX, XLS, and XLSX files are supported.", type: "error" });
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -181,7 +185,7 @@ export default function MandatesClient() {
       />
 
       {/* Upload Section */}
-      <DataCard title="Upload New Template" description="Upload PDF, DOC, or DOCX files (max 25MB)">
+      <DataCard title="Upload New Template" description="Upload PDF, DOC, DOCX, XLS, or XLSX files (max 25MB)">
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1">
             <Label htmlFor="mandateKey">Mandate Key</Label>
@@ -196,7 +200,7 @@ export default function MandatesClient() {
           <div className="flex gap-2">
             <input
               type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               ref={fileInputRef}
               onChange={(e) => {

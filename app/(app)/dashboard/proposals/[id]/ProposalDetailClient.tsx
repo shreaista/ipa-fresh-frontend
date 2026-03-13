@@ -1270,7 +1270,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
       {/* NEW: Proposal Documents Card */}
       <DataCard
         title="Proposal Documents"
-        description="Upload and manage documents for this proposal (max 25MB per file)"
+        description="Upload and manage documents for this proposal. Supported: PDF, DOC, DOCX, XLS, XLSX (max 25MB)"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -1290,16 +1290,16 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               <>
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="hidden"
                   ref={fileInputRef}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-                      const allowedExtensions = [".pdf", ".doc", ".docx"];
+                      const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
                       if (!allowedExtensions.includes(ext)) {
-                        setMessage({ text: "Only PDF, DOC, and DOCX files are supported.", type: "error" });
+                        setMessage({ text: "Only PDF, DOC, DOCX, XLS, and XLSX files are supported.", type: "error" });
                         if (fileInputRef.current) fileInputRef.current.value = "";
                         return;
                       }

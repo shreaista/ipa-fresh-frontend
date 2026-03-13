@@ -124,6 +124,22 @@ export async function extractDocumentFromBlob(
   const warnings: string[] = [];
   const extension = extractExtension(displayName);
 
+  // Excel files: store normally but extraction not implemented - do not crash
+  const EXCEL_EXTENSIONS = [".xls", ".xlsx"];
+  const EXCEL_MIME_TYPES = [
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ];
+  const isExcel =
+    EXCEL_EXTENSIONS.includes(extension) || EXCEL_MIME_TYPES.includes(fileType);
+  if (isExcel) {
+    return {
+      text: "",
+      warnings: ["Excel file uploaded successfully, but content extraction is not implemented yet."],
+      charactersProcessed: 0,
+    };
+  }
+
   // Validate file type is supported (check both MIME type and extension)
   if (!isFileTypeSupported(fileType) && !PYTHON_FIRST_EXTENSIONS.includes(extension)) {
     return {

@@ -15,13 +15,15 @@ const ALLOWED_CONTENT_TYPES = [
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 
-const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx"];
+const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
-const UNSUPPORTED_FILE_ERROR = "Only PDF, DOC, and DOCX files are supported.";
+const UNSUPPORTED_FILE_ERROR = "Only PDF, DOC, DOCX, XLS, and XLSX files are supported.";
 
 export async function POST(request: NextRequest) {
   try {
