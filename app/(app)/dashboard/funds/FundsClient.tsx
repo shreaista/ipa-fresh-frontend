@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { PageHeader, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -535,10 +536,17 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                     />
                   </div>
                   {createFundError && (
-                    <p className="text-sm text-destructive flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 shrink-0" />
-                      {createFundError}
-                    </p>
+                    <Alert variant="destructive" className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        {createFundError}
+                        {createFundError.includes("already exists") && (
+                          <span className="block mt-1 text-xs opacity-90">
+                            Choose a different fund name or check the Funds list for the existing fund.
+                          </span>
+                        )}
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </div>
                 <DialogFooter>

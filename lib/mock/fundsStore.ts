@@ -1,5 +1,4 @@
 import "server-only";
-import { productionMode } from "@/lib/config/productionMode";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -142,32 +141,20 @@ const fundMandateLinks: FundMandateLink[] = [
 let nextFundId = 8;
 let nextLinkId = 5;
 
-// Seed fund IDs (hidden in production mode)
-const SEED_FUND_IDS = new Set([
-  "fund-001",
-  "fund-002",
-  "fund-003",
-  "fund-004",
-  "fund-005",
-  "F-001",
-  "F-002",
-]);
+// Single source of truth: in-memory funds array. No filtering by status/archived/deleted.
+// Both listFunds and createFund use this exact storage and scope.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fund CRUD Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Returns funds visible for the given tenant (same scope used by list and create). */
-function getVisibleFundsForTenant(tenantId: string): Fund[] {
-  const byTenant = funds.filter((f) => f.tenantId === tenantId);
-  if (productionMode) {
-    return byTenant.filter((f) => !SEED_FUND_IDS.has(f.id));
-  }
-  return byTenant;
+/** Returns all funds for tenant. Same scope used by list and create - no filters. */
+function getFundsForTenant(tenantId: string): Fund[] {
+  return funds.filter((f) => f.tenantId === tenantId);
 }
 
 export function listFunds(tenantId: string): Fund[] {
-  return getVisibleFundsForTenant(tenantId);
+  return getFundsForTenant(tenantId);
 }
 
 export function getFundById(tenantId: string, fundId: string): Fund | undefined {
@@ -188,9 +175,9 @@ export function createFund(
     return { ok: false, error: "Fund name is required" };
   }
 
-  // Use same visible scope as listFunds so create/check and list are aligned
-  const visibleFunds = getVisibleFundsForTenant(tenantId);
-  const existingFund = visibleFunds.find(
+  // Use same scope as listFunds - exact same storage and filtering
+  const tenantFunds = getFundsForTenant(tenantId);
+  const existingFund = tenantFunds.find(
     (f) => f.name.toLowerCase() === input.name.trim().toLowerCase()
   );
   if (existingFund) {
