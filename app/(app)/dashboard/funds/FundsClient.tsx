@@ -134,19 +134,25 @@ interface FundsClientProps {
   mandates: FundMandateTemplate[];
 }
 
+const FUNDS_API_URL = "/api/tenant/funds";
+
 async function fetchFunds(): Promise<{ ok: boolean; funds?: Fund[]; error?: string }> {
+  console.log("[Funds] List load started, endpoint:", FUNDS_API_URL);
   try {
-    const res = await fetch("/api/tenant/funds", { credentials: "include" });
+    const res = await fetch(FUNDS_API_URL, { credentials: "include" });
     const data = await res.json();
-    if (data.ok && Array.isArray(data.data?.funds)) {
-      console.log("[Funds] List reload success, count:", data.data.funds.length);
-      return { ok: true, funds: data.data.funds };
+    const rawFunds = data.data?.funds;
+    const itemsLength = Array.isArray(rawFunds) ? rawFunds.length : 0;
+    console.log("[Funds] List load response status:", res.status, "raw items length:", itemsLength, "body:", JSON.stringify(data));
+    if (data.ok && Array.isArray(rawFunds)) {
+      console.log("[Funds] Funds loaded, count:", rawFunds.length);
+      return { ok: true, funds: rawFunds };
     }
     const errMsg = data.error || "Failed to load funds";
-    console.error("[Funds] List reload failed:", res.status, errMsg);
+    console.error("[Funds] List load failed:", res.status, errMsg);
     return { ok: false, error: errMsg };
   } catch (err) {
-    console.error("[Funds] List reload network error:", err);
+    console.error("[Funds] List load network error:", err);
     return { ok: false, error: "Network error" };
   }
 }
@@ -167,6 +173,9 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
   }, []);
 
   useEffect(() => {
+    console.log("[Funds] Initial funds from server, count:", initialFunds.length, "ids:", initialFunds.map((f) => f.id));
+    // Sync server props to client state when router.refresh() updates initialFunds
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional sync of RSC props
     setFunds(initialFunds);
   }, [initialFunds]);
   const [view, setView] = useState<"grid" | "table">("grid");
@@ -287,24 +296,28 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
       return;
     }
     const payload = { name: newFund.name.trim(), code: newFund.code?.trim() || undefined };
-    console.log("[Funds] Create fund clicked, payload:", payload);
+    const endpoint = `${typeof window !== "undefined" ? window.location.origin : ""}${FUNDS_API_URL}`;
+    console.log("[Funds] Create fund submit started");
+    console.log("[Funds] Create fund payload:", JSON.stringify(payload));
+    console.log("[Funds] Create fund API endpoint:", endpoint);
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/tenant/funds", {
+      const res = await fetch(FUNDS_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      console.log("[Funds] API response status:", res.status, res.statusText);
+      console.log("[Funds] Create fund response status:", res.status, res.statusText);
       let data: { ok?: boolean; data?: { fund?: Fund }; error?: string } = {};
       try {
         data = await res.json();
+        console.log("[Funds] Create fund response body:", JSON.stringify(data));
       } catch (parseErr) {
         console.error("[Funds] Failed to parse API response:", parseErr);
         const errMsg = res.status >= 400 ? `Server error (${res.status})` : "Invalid response from server";
         setCreateFundError(errMsg);
-        toast(errMsg, "error");
+        toast(errMsg || "Failed to create fund", "error");
         setIsSubmitting(false);
         return;
       }
@@ -333,7 +346,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
       console.error("[Funds] Create fund network error:", err);
       const errMsg = err instanceof Error ? err.message : "Network error";
       setCreateFundError(errMsg);
-      toast(errMsg, "error");
+      toast(errMsg || "Failed to create fund", "error");
     }
     setIsSubmitting(false);
   };

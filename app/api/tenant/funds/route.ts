@@ -15,6 +15,7 @@ export async function GET() {
     const tenantId = requireTenant(user);
 
     const funds = listFunds(tenantId);
+    console.log("[Funds API] GET funds, tenantId:", tenantId, "count:", funds.length, "ids:", funds.map((f) => f.id));
 
     return NextResponse.json({
       ok: true,
