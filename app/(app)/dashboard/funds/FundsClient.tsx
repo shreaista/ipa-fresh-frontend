@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast";
 import { PageHeader, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -133,9 +134,37 @@ interface FundsClientProps {
   mandates: FundMandateTemplate[];
 }
 
+async function fetchFunds(): Promise<{ ok: boolean; funds?: Fund[]; error?: string }> {
+  try {
+    const res = await fetch("/api/tenant/funds", { credentials: "include" });
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.data?.funds)) {
+      return { ok: true, funds: data.data.funds };
+    }
+    return { ok: false, error: data.error || "Failed to load funds" };
+  } catch {
+    return { ok: false, error: "Network error" };
+  }
+}
+
 export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, canManageFundMandates, mandates }: FundsClientProps) {
   const router = useRouter();
-  const [funds] = useState<Fund[]>(initialFunds);
+  const { toast } = useToast();
+  const [funds, setFunds] = useState<Fund[]>(initialFunds);
+
+  const loadFunds = useCallback(async () => {
+    const result = await fetchFunds();
+    if (result.ok && result.funds) {
+      setFunds(result.funds);
+      return true;
+    }
+    console.error("[Funds] List reload failed:", result.error);
+    return false;
+  }, []);
+
+  useEffect(() => {
+    setFunds(initialFunds);
+  }, [initialFunds]);
   const [view, setView] = useState<"grid" | "table">("grid");
   const [activeTab, setActiveTab] = useState<"funds" | "mandates">("funds");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -247,25 +276,39 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
   };
 
   const handleCreateFund = async () => {
+    if (!newFund.name.trim()) return;
+    console.log("[Funds] Create fund requested:", { name: newFund.name, code: newFund.code || "(none)" });
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/tenant/funds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(newFund),
       });
       const data = await res.json();
-      if (data.ok) {
+      if (data.ok && data.data?.fund) {
+        const created = data.data.fund;
+        console.log("[Funds] Create fund success:", { id: created.id, name: created.name });
         setIsCreateFundOpen(false);
         setNewFund({ name: "", code: "" });
-        startTransition(() => {
-          router.refresh();
-        });
+        setFunds((prev) => [...prev, created]);
+        const listOk = await loadFunds();
+        if (!listOk) {
+          console.warn("[Funds] Create succeeded but list reload failed; fund may already be in state");
+        } else {
+          console.log("[Funds] Funds list reload success");
+        }
+        startTransition(() => router.refresh());
+        toast("Fund created successfully");
       } else {
-        alert(data.error || "Failed to create fund");
+        const errMsg = data.error || "Failed to create fund";
+        console.error("[Funds] Create fund failure:", errMsg);
+        toast(errMsg, "error");
       }
-    } catch {
-      alert("Network error");
+    } catch (err) {
+      console.error("[Funds] Create fund network error:", err);
+      toast("Network error", "error");
     }
     setIsSubmitting(false);
   };

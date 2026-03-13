@@ -49,13 +49,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CreateFundInput = await request.json();
+    console.log("[Funds API] Create fund requested:", { name: body.name, code: body.code, tenantId });
 
     const result = createFund(tenantId, body);
 
     if (!result.ok) {
+      console.error("[Funds API] Create fund failure:", result.error);
       throw new AuthzHttpError(400, result.error || "Failed to create fund");
     }
 
+    console.log("[Funds API] Create fund success:", { id: result.fund?.id, name: result.fund?.name });
     return NextResponse.json({
       ok: true,
       data: { fund: result.fund },
