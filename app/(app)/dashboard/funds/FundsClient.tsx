@@ -735,7 +735,14 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
         </div>
       </div>
 
-      {view === "grid" ? (
+      {funds.length === 0 ? (
+        <EmptyState
+          icon={Wallet}
+          title="No funds created yet."
+          description="Create your first fund to begin."
+          action={{ label: "Create Fund", onClick: () => setIsCreateFundOpen(true) }}
+        />
+      ) : view === "grid" ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {funds.map((fund) => (
             <Card key={fund.id} className="group hover:shadow-md transition-all duration-200">
@@ -792,7 +799,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           ))}
         </div>
       ) : (
-        <DataCard title="All Funds" description={`${funds.length} funds total`} noPadding>
+        <DataCard title="All Funds" description={`${funds.length} fund${funds.length !== 1 ? "s" : ""} total`} noPadding>
           <Table>
             <TableHeader>
               <TableRow>

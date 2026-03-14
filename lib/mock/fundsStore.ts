@@ -1,4 +1,5 @@
 import "server-only";
+import { productionMode } from "@/lib/config/productionMode";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -141,16 +142,28 @@ const fundMandateLinks: FundMandateLink[] = [
 let nextFundId = 8;
 let nextLinkId = 5;
 
-// Single source of truth: in-memory funds array. No filtering by status/archived/deleted.
-// Both listFunds and createFund use this exact storage and scope.
+// Seed fund IDs (hidden in production mode - only real created funds shown)
+const SEED_FUND_IDS = new Set([
+  "fund-001",
+  "fund-002",
+  "fund-003",
+  "fund-004",
+  "fund-005",
+  "F-001",
+  "F-002",
+]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fund CRUD Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Returns all funds for tenant. Same scope used by list and create - no filters. */
+/** Returns funds for tenant. In production mode, excludes seed/demo records. Same scope for list and create. */
 function getFundsForTenant(tenantId: string): Fund[] {
-  return funds.filter((f) => f.tenantId === tenantId);
+  const byTenant = funds.filter((f) => f.tenantId === tenantId);
+  if (productionMode) {
+    return byTenant.filter((f) => !SEED_FUND_IDS.has(f.id));
+  }
+  return byTenant;
 }
 
 /** Normalize for exact duplicate comparison: trim, collapse whitespace, lowercase. */
