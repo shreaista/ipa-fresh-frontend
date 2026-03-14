@@ -4,7 +4,6 @@ import {
   requireUserRole,
   requireTenant,
   jsonError,
-  AuthzHttpError,
 } from "@/lib/authz";
 import { listFunds, createFund, type CreateFundInput } from "@/lib/mock/fundsStore";
 
@@ -45,14 +44,25 @@ export async function POST(request: NextRequest) {
     requireUserRole(user, ["tenant_admin", "saas_admin"]);
     const tenantId = requireTenant(user);
 
-    const body: CreateFundInput = await request.json();
-    console.log("[Funds API] POST create, tenantId:", tenantId, "source:", STORAGE_SOURCE, "incoming name:", JSON.stringify(body.name), "incoming code:", JSON.stringify(body.code));
+    const body = await request.json();
+    const name = body?.name;
+    const code = body?.code;
 
-    const result = createFund(tenantId, body);
+    console.log("[Funds API] POST create, tenantId:", tenantId, "raw name:", JSON.stringify(name), "raw code:", JSON.stringify(code));
+
+    const result = createFund(tenantId, { name, code } as CreateFundInput);
 
     if (!result.ok) {
-      console.error("[Funds API] POST create failure:", result.error);
-      throw new AuthzHttpError(400, result.error || "Failed to create fund");
+      console.error("[Funds API] POST create failure:", result.error, "debug:", result.debug);
+      const isDev = process.env.NODE_ENV !== "production";
+      return NextResponse.json(
+        {
+          ok: false,
+          error: result.error || "Failed to create fund",
+          ...(isDev && result.debug && { debug: result.debug }),
+        },
+        { status: 400 }
+      );
     }
 
     console.log("[Funds API] POST create success, id:", result.fund?.id, "name:", result.fund?.name);

@@ -171,51 +171,80 @@ export interface CreateFundResult {
   ok: boolean;
   fund?: Fund;
   error?: string;
+  debug?: {
+    incomingName: string;
+    normalizedIncomingName: string;
+    incomingCode: string;
+    normalizedIncomingCode: string;
+    existingNames: string[];
+    existingCodes: string[];
+    matchedFundId?: string;
+    matchedFundName?: string;
+    matchedFundCode?: string;
+    matchedOn?: "name" | "code";
+  };
 }
 
 export function createFund(
   tenantId: string,
   input: CreateFundInput
 ): CreateFundResult {
-  if (!input.name || input.name.trim().length === 0) {
+  const rawName = typeof input.name === "string" ? input.name : String(input?.name ?? "");
+  const rawCode = input.code != null ? (typeof input.code === "string" ? input.code : String(input.code)) : undefined;
+
+  if (!rawName || rawName.trim().length === 0) {
     return { ok: false, error: "Fund name is required" };
   }
 
-  const normalizedName = normalizeForComparison(input.name);
-  const normalizedCode = normalizeForComparison(input.code);
+  const normalizedName = normalizeForComparison(rawName);
+  const normalizedCode = normalizeForComparison(rawCode);
 
   const tenantFunds = getFundsForTenant(tenantId);
+  const existingNames = tenantFunds.map((f) => normalizeForComparison(f.name));
+  const existingCodes = tenantFunds.map((f) => normalizeForComparison(f.code)).filter((c) => c !== "");
+
+  const debugBase = {
+    incomingName: rawName,
+    normalizedIncomingName: normalizedName,
+    incomingCode: rawCode ?? "",
+    normalizedIncomingCode: normalizedCode,
+    existingNames,
+    existingCodes,
+  };
+
   const nameMatch = tenantFunds.find((f) => normalizeForComparison(f.name) === normalizedName);
+  if (nameMatch) {
+    const debug = {
+      ...debugBase,
+      matchedFundId: nameMatch.id,
+      matchedFundName: nameMatch.name,
+      matchedOn: "name" as const,
+    };
+    console.log("[fundsStore] Duplicate name rejected:", debug);
+    return { ok: false, error: "A fund with this name already exists", debug };
+  }
+
   const codeMatch =
     normalizedCode !== ""
       ? tenantFunds.find((f) => normalizeForComparison(f.code) === normalizedCode)
       : null;
-
-  if (nameMatch) {
-    console.log("[fundsStore] Duplicate name rejected:", {
-      incomingName: input.name,
-      normalizedName,
-      matchedExistingName: nameMatch.name,
-      matchedExistingId: nameMatch.id,
-    });
-    return { ok: false, error: "A fund with this name already exists" };
-  }
   if (codeMatch) {
-    console.log("[fundsStore] Duplicate code rejected:", {
-      incomingCode: input.code,
-      normalizedCode,
-      matchedExistingCode: codeMatch.code,
-      matchedExistingId: codeMatch.id,
-    });
-    return { ok: false, error: "A fund with this code already exists" };
+    const debug = {
+      ...debugBase,
+      matchedFundId: codeMatch.id,
+      matchedFundCode: codeMatch.code,
+      matchedOn: "code" as const,
+    };
+    console.log("[fundsStore] Duplicate code rejected:", debug);
+    return { ok: false, error: "A fund with this code already exists", debug };
   }
 
   const now = new Date().toISOString();
   const newFund: Fund = {
     id: `fund-${String(nextFundId++).padStart(3, "0")}`,
     tenantId,
-    name: input.name.trim(),
-    code: input.code?.trim() || undefined,
+    name: rawName.trim(),
+    code: rawCode?.trim() || undefined,
     status: "active",
     createdAt: now,
     updatedAt: now,
