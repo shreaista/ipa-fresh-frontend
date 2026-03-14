@@ -8,6 +8,7 @@ import {
   getQueueById,
   assignProposalToQueue as assignToQueue,
 } from "./queues";
+import { getFundById } from "./fundsStore";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -16,6 +17,8 @@ import {
 export type ProposalStatus = "New" | "Assigned" | "In Review" | "Approved" | "Declined";
 
 export type AssignmentType = "direct" | "queue" | "none";
+
+export type ProposalStage = "Seed" | "Series A" | "Series B" | "Growth";
 
 export interface Proposal {
   id: string;
@@ -30,6 +33,9 @@ export interface Proposal {
   submittedAt: string;
   dueDate: string | null;
   priority: "High" | "Medium" | "Low";
+  sector?: string;
+  stage?: ProposalStage;
+  description?: string;
 }
 
 export interface ProposalWithAssignment extends Proposal {
@@ -192,6 +198,80 @@ const SEED_PROPOSAL_IDS = new Set([
 function filterProposalsForProduction<T extends { id: string }>(items: T[]): T[] {
   if (!productionMode) return items;
   return items.filter((p) => !SEED_PROPOSAL_IDS.has(p.id));
+}
+
+function nextProposalId(): string {
+  const numericIds = proposals
+    .map((p) => {
+      const m = p.id.match(/^P-(\d+)$/);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter((n) => n > 0);
+  const max = numericIds.length ? Math.max(...numericIds) : 103;
+  return `P-${max + 1}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Create Proposal
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CreateProposalInput {
+  name: string;
+  company?: string;
+  sector?: string;
+  stage?: ProposalStage;
+  amountRequested?: number;
+  fundId?: string;
+  description?: string;
+}
+
+export interface CreateProposalResult {
+  ok: boolean;
+  proposal?: Proposal;
+  error?: string;
+}
+
+export function createProposal(
+  tenantId: string,
+  input: CreateProposalInput
+): CreateProposalResult {
+  const name = (input.name ?? "").trim();
+  if (!name) {
+    return { ok: false, error: "Proposal name is required" };
+  }
+
+  let fundName = "Unspecified";
+  if (input.fundId) {
+    const fund = getFundById(tenantId, input.fundId);
+    if (!fund) {
+      return { ok: false, error: "Fund not found" };
+    }
+    fundName = fund.name;
+  }
+
+  const id = nextProposalId();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const proposal: Proposal = {
+    id,
+    name,
+    applicant: (input.company ?? "").trim() || "Unknown",
+    fund: fundName,
+    amount: typeof input.amountRequested === "number" ? input.amountRequested : 0,
+    status: "New",
+    assignedToUserId: null,
+    assignedToName: null,
+    tenantId,
+    submittedAt: today,
+    dueDate: null,
+    priority: "Medium",
+    sector: input.sector?.trim() || undefined,
+    stage: input.stage,
+    description: input.description?.trim() || undefined,
+  };
+
+  proposals.push(proposal);
+  return { ok: true, proposal };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
