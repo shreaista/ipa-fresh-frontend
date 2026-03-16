@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
@@ -19,6 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, Loader2, AlertCircle, X } from "lucide-react";
+import {
+  fetchFundsFromApi,
+  filterActiveFundsForProposal,
+  type FundOption,
+} from "@/lib/api/funds";
+import type { Fund } from "@/lib/mock/fundsStore";
 
 const STAGES = [
   "Seed",
@@ -32,44 +38,6 @@ const STAGES = [
 const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
-interface Fund {
-  id: string;
-  tenantId: string;
-  name: string;
-  code?: string;
-  status: string;
-}
-
-const FUNDS_API_URL = "/api/tenant/funds";
-
-async function fetchFundsForProposal(): Promise<Fund[]> {
-  console.log("[NewProposal] Fund load started, endpoint:", FUNDS_API_URL);
-  try {
-    const res = await fetch(FUNDS_API_URL, { credentials: "include" });
-    const data = await res.json();
-    const rawFunds = data.data?.funds;
-    const rawCount = Array.isArray(rawFunds) ? rawFunds.length : 0;
-    console.log("[NewProposal] Fund load response status:", res.status, "raw funds count:", rawCount);
-
-    if (!data.ok || !Array.isArray(rawFunds)) {
-      console.warn("[NewProposal] Fund load failed or empty, ok:", data.ok, "rawCount:", rawCount);
-      return [];
-    }
-
-    const activeFunds = rawFunds.filter(
-      (f: Fund) => !f.status || String(f.status).toLowerCase() === "active"
-    );
-    const activeCount = activeFunds.length;
-    const dropdownOptions = activeFunds.map((f: Fund) => ({ id: f.id, name: f.name, code: f.code }));
-    console.log("[NewProposal] Active funds count:", activeCount, "dropdown options:", dropdownOptions);
-
-    return activeFunds;
-  } catch (err) {
-    console.error("[NewProposal] Fund load network error:", err);
-    return [];
-  }
-}
-
 function validateFile(file: File): string | null {
   const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
@@ -81,11 +49,21 @@ function validateFile(file: File): string | null {
   return null;
 }
 
-export default function NewProposalClient() {
+interface NewProposalClientProps {
+  initialFunds: Fund[];
+}
+
+export default function NewProposalClient({ initialFunds }: NewProposalClientProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [funds, setFunds] = useState<Fund[]>([]);
-  const [fundsLoading, setFundsLoading] = useState(true);
+  const clientDataAuthoritativeRef = useRef(false);
+
+  const activeFromInitial = useMemo(
+    () => filterActiveFundsForProposal(initialFunds as FundOption[]),
+    [initialFunds]
+  );
+  const [funds, setFunds] = useState<FundOption[]>(() => activeFromInitial);
+  const [fundsLoading, setFundsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -105,10 +83,43 @@ export default function NewProposalClient() {
 
   const loadFunds = useCallback(async () => {
     setFundsLoading(true);
-    const list = await fetchFundsForProposal();
-    setFunds(list);
+    const result = await fetchFundsFromApi();
+    if (result.ok && result.funds) {
+      const active = filterActiveFundsForProposal(result.funds);
+      const dropdownOptions = active.map((f) => ({ id: f.id, name: f.name, code: f.code }));
+      console.log(
+        "[NewProposal] Client fetch: endpoint /api/tenant/funds, raw count:",
+        result.funds.length,
+        "active count:",
+        active.length,
+        "dropdown options:",
+        dropdownOptions
+      );
+      if (active.length > 0) {
+        setFunds(active);
+        clientDataAuthoritativeRef.current = true;
+      } else {
+        console.warn("[NewProposal] Client fetch returned 0 active funds, keeping SSR data to avoid overwriting with empty");
+      }
+    } else {
+      console.warn("[NewProposal] Client fetch failed, keeping existing funds. Error:", result.error);
+    }
     setFundsLoading(false);
   }, []);
+
+  useEffect(() => {
+    console.log(
+      "[NewProposal] Initial funds from SSR: count:",
+      initialFunds.length,
+      "active:",
+      activeFromInitial.length,
+      "ids:",
+      activeFromInitial.map((f) => f.id)
+    );
+    if (!clientDataAuthoritativeRef.current) {
+      setFunds(activeFromInitial);
+    }
+  }, [initialFunds, activeFromInitial]);
 
   useEffect(() => {
     loadFunds();
@@ -245,6 +256,13 @@ export default function NewProposalClient() {
 
   const hasFieldError = (field: string) => !!fieldErrors[field];
 
+  const selectContentProps = {
+    position: "popper" as const,
+    sideOffset: 4,
+    collisionPadding: 12,
+    className: "z-[200]",
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -261,16 +279,16 @@ export default function NewProposalClient() {
         subtitle="Create a new funding proposal linked to a fund"
       />
 
-      <Card className="max-w-2xl">
+      <Card className="max-w-2xl overflow-visible">
         <CardHeader>
           <CardTitle>Proposal Details</CardTitle>
           <CardDescription>
             Fill in the proposal information. Fields marked with * are required.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
+        <CardContent className="overflow-visible">
+          <form onSubmit={handleSubmit} className="space-y-6 overflow-visible">
+            <div className="grid gap-5 sm:grid-cols-2 overflow-visible">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="name">
                   Proposal Name <span className="text-destructive">*</span>
@@ -356,12 +374,7 @@ export default function NewProposalClient() {
                   <SelectTrigger id="fundId" className={hasFieldError("fundId") ? "border-destructive" : ""}>
                     <SelectValue placeholder={fundsLoading ? "Loading funds..." : "Select fund"} />
                   </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    collisionPadding={8}
-                    className="z-[100]"
-                  >
+                  <SelectContent {...selectContentProps}>
                     {funds.map((f) => (
                       <SelectItem key={f.id} value={f.id}>
                         {f.name}
@@ -397,12 +410,7 @@ export default function NewProposalClient() {
                   <SelectTrigger id="stage">
                     <SelectValue placeholder="Select stage" />
                   </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    collisionPadding={8}
-                    className="z-[100]"
-                  >
+                  <SelectContent {...selectContentProps}>
                     {STAGES.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
