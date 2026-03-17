@@ -108,6 +108,35 @@ export function getFundMandatesPrefix(tenantId: string, fundId: string): string 
   return `tenants/${tenantId}/funds/${fundId}/mandates/`;
 }
 
+/** Blob info for fund mandate files (fundId-based storage). Compatible with evaluation. */
+export interface FundMandateBlobInfo {
+  blobPath: string;
+  name: string;
+  uploadedAt: string;
+  size: number;
+  contentType: string;
+  fundId: string;
+}
+
+/** List mandate files for a fund (fundId-based path). */
+export async function listFundMandateBlobsByFundId(
+  tenantId: string,
+  fundId: string
+): Promise<FundMandateBlobInfo[]> {
+  const container = getDefaultContainer();
+  const prefix = getFundMandatesPrefix(tenantId, fundId);
+  const blobs = await listBlobs({ container, prefix });
+
+  return blobs.map((b) => ({
+    blobPath: b.path,
+    name: b.fileName || extractFileName(b.path),
+    uploadedAt: b.lastModified,
+    size: b.size,
+    contentType: b.contentType || "application/octet-stream",
+    fundId,
+  }));
+}
+
 function sanitizeFileName(fileName: string): string {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 }

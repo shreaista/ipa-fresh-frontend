@@ -9,7 +9,14 @@ import {
   RBAC_PERMISSIONS,
 } from "@/lib/authz";
 import { getFundMandateDownload } from "@/lib/storage/azure";
+import { downloadBlob, getDefaultContainer } from "@/lib/storage/azureBlob";
 import { logAudit } from "@/lib/audit";
+
+function extractFilenameFromPath(path: string): string {
+  if (!path) return "download";
+  const parts = path.split("/");
+  return parts[parts.length - 1] || "download";
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,10 +31,28 @@ export async function GET(request: NextRequest) {
       throw new AuthzHttpError(400, "blobName is required");
     }
 
-    const result = await getFundMandateDownload({
-      tenantId,
-      blobName,
-    });
+    // fundId-based path: tenants/{tenantId}/funds/{fundId}/mandates/...
+    const isFundIdPath = blobName.includes("/funds/") && blobName.includes("/mandates/");
+    let result: { buffer: Buffer; contentType: string; filename: string } | null = null;
+
+    if (isFundIdPath && blobName.startsWith(`tenants/${tenantId}/`)) {
+      const container = getDefaultContainer();
+      const blobResult = await downloadBlob(container, blobName);
+      if (blobResult) {
+        result = {
+          buffer: blobResult.buffer,
+          contentType: blobResult.contentType,
+          filename: extractFilenameFromPath(blobName),
+        };
+      }
+    }
+
+    if (!result) {
+      result = await getFundMandateDownload({
+        tenantId,
+        blobName,
+      });
+    }
 
     if (!result) {
       throw new AuthzHttpError(404, "File not found");

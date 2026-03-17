@@ -14,7 +14,6 @@ import {
   type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
-import { getFundForProposal } from "@/lib/mock/funds";
 import { runEvaluation } from "@/lib/evaluation/proposalEvaluator";
 import { checkRateLimit } from "@/lib/evaluation/rateLimiter";
 import { logAudit } from "@/lib/audit";
@@ -71,23 +70,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
-    const proposal = proposalResult.proposal as Proposal & { fund: string };
+    const proposal = proposalResult.proposal as Proposal & { fund: string; fundId?: string };
 
     // If role is assessor, must also pass canAccessProposal
     if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
       throw new AuthzHttpError(403, "Access denied to this proposal");
     }
 
-    // Get fund and mandate key for this proposal
-    const fund = getFundForProposal(tenantId, proposal.fund);
-    const mandateKey = fund?.mandateKey || null;
-
-    // Run evaluation with LLM
+    // Run evaluation with LLM (uses fundId for mandate fetch when available)
     const result = await runEvaluation({
       tenantId,
       proposalId: id,
       fundName: proposal.fund,
-      mandateKey,
+      fundId: proposal.fundId || null,
+      mandateKey: null,
       evaluatedByUserId: ctx.user.id || "",
       evaluatedByEmail: ctx.user.email || "",
     });

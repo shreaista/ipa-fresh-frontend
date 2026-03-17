@@ -13,22 +13,11 @@ import {
   type Proposal,
 } from "@/lib/authz";
 import { getProposalForUser } from "@/lib/mock/proposals";
-import { getFundForProposal } from "@/lib/mock/funds";
-import { getFundMandateById } from "@/lib/mock/fundMandates";
 import { listFundMandates } from "@/lib/storage/azure";
+import { listFundMandateBlobsByFundId } from "@/lib/storage/azureBlob";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
-}
-
-function formatTicketAmount(amount: number): string {
-  if (amount >= 1000000) {
-    return `$${(amount / 1000000).toFixed(1)}M`;
-  }
-  if (amount >= 1000) {
-    return `$${(amount / 1000).toFixed(0)}K`;
-  }
-  return `$${amount}`;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -70,17 +59,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
       throw new AuthzHttpError(404, "Proposal not found");
     }
 
-    const proposal = proposalResult.proposal as Proposal & { fund: string };
+    const proposal = proposalResult.proposal as Proposal & { fund: string; fundId?: string };
 
     // If role is assessor, must also pass canAccessProposal
     if (ctx.role === "assessor" && !canAccessProposal(ctx, proposal)) {
       throw new AuthzHttpError(403, "Access denied to this proposal");
     }
 
-    // NEW: Get fund for this proposal (by fund name)
-    const fund = getFundForProposal(tenantId, proposal.fund);
+    const fundId = proposal.fundId;
 
-    if (!fund) {
+    if (!fundId) {
       return NextResponse.json({
         ok: true,
         data: {
@@ -90,30 +78,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       });
     }
 
-    if (!fund.mandateTemplateId) {
-      return NextResponse.json({
-        ok: true,
-        data: {
-          mandate: null,
-          message: "No mandate template assigned to this fund",
-        },
-      });
-    }
-
-    // NEW: Get mandate template details
-    const mandate = getFundMandateById(tenantId, fund.mandateTemplateId);
-
-    if (!mandate) {
-      return NextResponse.json({
-        ok: true,
-        data: {
-          mandate: null,
-          message: "Mandate template not found",
-        },
-      });
-    }
-
-    // NEW: Get template files from Azure blob storage
+    // Fetch mandate files from fundId-based storage (tenants/{tenantId}/funds/{fundId}/mandates/)
     let templateFiles: Array<{
       name: string;
       blobPath: string;
@@ -121,45 +86,49 @@ export async function GET(request: NextRequest, context: RouteContext) {
       size: number;
     }> = [];
 
-    if (fund.mandateKey) {
+    try {
+      const blobs = await listFundMandateBlobsByFundId(tenantId, fundId);
+      templateFiles = blobs.map((b) => ({
+        name: b.name,
+        blobPath: b.blobPath,
+        uploadedAt: b.uploadedAt,
+        size: b.size,
+      }));
+    } catch (error) {
+      console.error("[proposal/mandate] Error listing mandate files for fundId:", fundId, error);
       try {
-        const blobs = await listFundMandates({
-          tenantId,
-          mandateKey: fund.mandateKey,
-        });
-
-        templateFiles = blobs.map((blob) => ({
-          name: blob.name,
-          blobPath: blob.blobName,
-          uploadedAt: blob.uploadedAt,
-          size: blob.size,
+        const legacyBlobs = await listFundMandates({ tenantId });
+        const byFund = legacyBlobs.filter((b) => b.mandateKey === fundId);
+        templateFiles = byFund.map((b) => ({
+          name: b.name,
+          blobPath: b.blobName,
+          uploadedAt: b.uploadedAt,
+          size: b.size,
         }));
-      } catch (error) {
-        console.error("[proposal/mandate] Error listing mandate files:", error);
+      } catch {
+        // ignore
       }
     }
 
-    // NEW: Return mandate data
     return NextResponse.json({
       ok: true,
       data: {
         mandate: {
-          mandateId: mandate.id,
-          mandateName: mandate.name,
-          strategy: mandate.strategy,
-          geography: mandate.geography,
-          ticketRange: `${formatTicketAmount(mandate.minTicket)} - ${formatTicketAmount(mandate.maxTicket)}`,
-          minTicket: mandate.minTicket,
-          maxTicket: mandate.maxTicket,
-          version: mandate.version,
-          status: mandate.status,
-          notes: mandate.notes,
+          mandateId: fundId,
+          mandateName: proposal.fund,
+          strategy: "",
+          geography: "",
+          ticketRange: "",
+          minTicket: 0,
+          maxTicket: 0,
+          version: 1,
+          status: "active",
+          notes: undefined,
           templateFiles,
         },
         fund: {
-          fundId: fund.id,
-          fundName: fund.name,
-          mandateKey: fund.mandateKey,
+          fundId,
+          fundName: proposal.fund,
         },
       },
     });

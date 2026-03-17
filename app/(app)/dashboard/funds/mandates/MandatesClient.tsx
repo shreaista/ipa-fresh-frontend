@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useRef, useSyncExternalStore, useCallback } from "react";
+import { useState, useRef, useSyncExternalStore, useCallback, useEffect } from "react";
 import { PageHeader, DataCard, EmptyState } from "@/components/app";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -25,10 +31,17 @@ import {
 interface FundMandateBlob {
   name?: string;
   mandateKey?: string;
+  fundId?: string;
   uploadedAt?: string;
   blobName: string;
   size?: number;
   contentType?: string;
+}
+
+interface FundOption {
+  id: string;
+  name: string;
+  code?: string;
 }
 
 function extractFilenameFromBlobName(blobName: string): string {
@@ -84,18 +97,30 @@ export default function MandatesClient() {
   const [files, setFiles] = useState<FundMandateBlob[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [mandateKey, setMandateKey] = useState("");
+  const [funds, setFunds] = useState<FundOption[]>([]);
+  const [selectedFundId, setSelectedFundId] = useState("");
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const initialLoadRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadFiles = useCallback(async (filterKey?: string) => {
+  useEffect(() => {
+    fetch("/api/tenant/funds", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && Array.isArray(data.data?.funds)) {
+          setFunds(data.data.funds);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadFiles = useCallback(async (fundId?: string) => {
     setLoading(true);
     setMessage(null);
     try {
       const params = new URLSearchParams({ source: "blob" });
-      if (filterKey) {
-        params.set("mandateKey", filterKey);
+      if (fundId) {
+        params.set("fundId", fundId);
       }
       const res = await fetch(`/api/tenant/fund-mandates?${params}`);
       const data = await res.json();
@@ -113,14 +138,22 @@ export default function MandatesClient() {
   useSyncExternalStore(emptySubscribe, () => {
     if (!initialLoadRef.current) {
       initialLoadRef.current = true;
-      loadFiles();
     }
     return null;
   });
 
+  useEffect(() => {
+    if (selectedFundId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch mandate files when fund changes
+      void loadFiles(selectedFundId);
+    } else {
+      setFiles([]);
+    }
+  }, [selectedFundId, loadFiles]);
+
   const handleUpload = async (file: File) => {
-    if (!mandateKey.trim()) {
-      setMessage({ text: "Please enter a mandate key", type: "error" });
+    if (!selectedFundId) {
+      setMessage({ text: "Please select a fund first", type: "error" });
       return;
     }
 
@@ -137,7 +170,7 @@ export default function MandatesClient() {
 
     try {
       const formData = new FormData();
-      formData.append("mandateKey", mandateKey.trim());
+      formData.append("fundId", selectedFundId);
       formData.append("file", file);
 
       const res = await fetch("/api/tenant/fund-mandates/upload", {
@@ -149,7 +182,7 @@ export default function MandatesClient() {
 
       if (data.ok) {
         setMessage({ text: `Uploaded: ${data.data.filename}`, type: "success" });
-        await loadFiles();
+        await loadFiles(selectedFundId);
       } else {
         setMessage({ text: data.error || "Upload failed", type: "error" });
       }
@@ -173,7 +206,7 @@ export default function MandatesClient() {
         title="Fund Mandate Templates"
         subtitle="Upload and manage fund mandate template files. Uploaded mandate files are used to evaluate whether proposals fit the fund strategy."
         actions={
-          <Button onClick={() => loadFiles()} disabled={loading}>
+          <Button onClick={() => selectedFundId && loadFiles(selectedFundId)} disabled={loading || !selectedFundId}>
             {loading ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
@@ -185,17 +218,24 @@ export default function MandatesClient() {
       />
 
       {/* Upload Section */}
-      <DataCard title="Upload New Template" description="Upload PDF, DOC, DOCX, XLS, or XLSX files (max 25MB)">
+      <DataCard title="Upload New Template" description="Select a fund, then upload PDF, DOC, DOCX, XLS, or XLSX files (max 25MB). Files are automatically associated with the selected fund.">
         <div className="flex flex-col sm:flex-row gap-4 items-end">
-          <div className="flex-1">
-            <Label htmlFor="mandateKey">Mandate Key</Label>
-            <Input
-              id="mandateKey"
-              value={mandateKey}
-              onChange={(e) => setMandateKey(e.target.value)}
-              placeholder="e.g., growth-equity-2026"
-              className="mt-1"
-            />
+          <div className="flex-1 min-w-[200px]">
+            <Label htmlFor="fundId">Fund</Label>
+            <Select value={selectedFundId} onValueChange={setSelectedFundId}>
+              <SelectTrigger id="fundId" className="mt-1">
+                <SelectValue placeholder="Select a fund" />
+              </SelectTrigger>
+              <SelectContent>
+                {funds.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                    {f.code ? ` (${f.code})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">Mandate files will be associated with this fund.</p>
           </div>
           <div className="flex gap-2">
             <input
@@ -212,7 +252,7 @@ export default function MandatesClient() {
             />
             <Button
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || !mandateKey.trim()}
+              disabled={uploading || !selectedFundId}
             >
               {uploading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -234,12 +274,12 @@ export default function MandatesClient() {
       {files.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="No Templates Uploaded"
-          description="Upload your first fund mandate template to get started."
+          title={selectedFundId ? "No Templates for This Fund" : "Select a Fund"}
+          description={selectedFundId ? "Upload mandate files for this fund to get started." : "Select a fund above to view or upload mandate templates."}
         />
       ) : (
         <DataCard
-          title="Uploaded Templates"
+          title={`Mandate Files for ${funds.find((f) => f.id === selectedFundId)?.name || "Selected Fund"}`}
           description={`${files.length} file${files.length !== 1 ? "s" : ""} (newest first)`}
           noPadding
         >
@@ -247,7 +287,7 @@ export default function MandatesClient() {
             <TableHeader>
               <TableRow>
                 <TableHead>File Name</TableHead>
-                <TableHead>Mandate Key</TableHead>
+                <TableHead>Fund</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Size</TableHead>
                 <TableHead>Uploaded</TableHead>
@@ -264,7 +304,7 @@ export default function MandatesClient() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{file.mandateKey || "-"}</Badge>
+                    <Badge variant="outline">{funds.find((f) => f.id === (file.fundId || selectedFundId))?.name || file.fundId || "-"}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {getDisplayContentType(file)}

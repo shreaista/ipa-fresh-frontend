@@ -35,6 +35,7 @@ export interface Proposal {
   name: string;
   applicant: string;
   fund: string;
+  fundId?: string;
   amount: number;
   status: ProposalStatus;
   assignedToUserId: string | null;
@@ -308,6 +309,7 @@ export function createProposal(
     name,
     applicant: company,
     fund: fundName,
+    fundId: input.fundId,
     amount: amountRequested,
     status: "New",
     assignedToUserId: null,

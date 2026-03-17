@@ -121,7 +121,8 @@ function getDisplayFileName(blob: BlobMandate): string {
 
 interface BlobMandate {
   name: string;
-  mandateKey: string;
+  mandateKey?: string;
+  fundId?: string;
   uploadedAt: string;
   blobName: string;
   size: number;
@@ -180,7 +181,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
   const [blobMandates, setBlobMandates] = useState<BlobMandate[]>([]);
   const [blobLoading, setBlobLoading] = useState(false);
   const [blobUploadMessage, setBlobUploadMessage] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [blobMandateKey, setBlobMandateKey] = useState("");
+  const [blobSelectedFundId, setBlobSelectedFundId] = useState("");
   const blobFileInputRef = useRef<HTMLInputElement>(null);
 
   const [newMandate, setNewMandate] = useState({
@@ -192,10 +193,12 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
     notes: "",
   });
 
-  const loadBlobMandates = async () => {
+  const loadBlobMandates = useCallback(async (fundId?: string) => {
     setBlobLoading(true);
     try {
-      const res = await fetch("/api/tenant/fund-mandates?source=blob");
+      const params = new URLSearchParams({ source: "blob" });
+      if (fundId) params.set("fundId", fundId);
+      const res = await fetch(`/api/tenant/fund-mandates?${params}`);
       let data: { ok?: boolean; data?: { files?: BlobMandate[] }; error?: string } = {};
       try {
         data = await res.json();
@@ -213,24 +216,33 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
       console.error("Failed to load blob mandates");
     }
     setBlobLoading(false);
-  };
+  }, []);
 
   // Handle tab changes - load blob mandates when switching to mandates tab
   const handleTabChange = (nextTab: string) => {
     const tab = nextTab as "funds" | "mandates";
     setActiveTab(tab);
-    if (tab === "mandates") {
-      loadBlobMandates();
+    if (tab === "mandates" && blobSelectedFundId) {
+      loadBlobMandates(blobSelectedFundId);
     }
   };
 
-  const handleBlobUpload = async (mandateKey: string, file: File) => {
+  useEffect(() => {
+    if (activeTab === "mandates" && blobSelectedFundId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch mandates when fund/tab changes
+      void loadBlobMandates(blobSelectedFundId);
+    } else if (activeTab === "mandates" && !blobSelectedFundId) {
+      setBlobMandates([]);
+    }
+  }, [blobSelectedFundId, activeTab, loadBlobMandates]);
+
+  const handleBlobUpload = async (fundId: string, file: File) => {
     setBlobLoading(true);
     setBlobUploadMessage(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("mandateKey", mandateKey);
+      formData.append("fundId", fundId);
 
       const res = await fetch("/api/tenant/fund-mandates/upload", {
         method: "POST",
@@ -261,7 +273,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           message: `Uploaded: ${fileName}`,
           type: "success",
         });
-        await loadBlobMandates();
+        await loadBlobMandates(fundId);
       }
     } catch {
       setBlobUploadMessage({
@@ -1078,8 +1090,8 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => loadBlobMandates()}
-                      disabled={blobLoading}
+                      onClick={() => blobSelectedFundId && loadBlobMandates(blobSelectedFundId)}
+                      disabled={blobLoading || !blobSelectedFundId}
                     >
                       {blobLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1098,21 +1110,28 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
               <CardContent>
                 <div className="mb-4 p-3 bg-muted/30 rounded-lg border">
                   <p className="text-sm font-medium mb-2">Upload New Template</p>
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1">
-                      <Label htmlFor="blobMandateKey" className="text-xs">
-                        Mandate Key <span className="text-red-500">*</span>
+                  <div className="flex items-end gap-3 flex-wrap">
+                    <div className="flex-1 min-w-[200px]">
+                      <Label htmlFor="blobFundId" className="text-xs">
+                        Fund <span className="text-red-500">*</span>
                       </Label>
-                      <Input
-                        id="blobMandateKey"
-                        value={blobMandateKey}
-                        onChange={(e) => setBlobMandateKey(e.target.value)}
-                        placeholder="e.g., growth-equity-2026"
-                        className={`h-8 text-sm mt-1 ${!blobMandateKey.trim() ? "border-amber-300 focus:border-amber-400" : ""}`}
-                      />
-                      {!blobMandateKey.trim() && (
+                      <select
+                        id="blobFundId"
+                        value={blobSelectedFundId}
+                        onChange={(e) => setBlobSelectedFundId(e.target.value)}
+                        className={`flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm mt-1 ${!blobSelectedFundId ? "border-amber-300 focus:border-amber-400" : ""}`}
+                      >
+                        <option value="">Select a fund</option>
+                        {funds.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                            {f.code ? ` (${f.code})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {!blobSelectedFundId && (
                         <p className="text-xs text-amber-600 mt-1">
-                          Enter a mandate key to enable upload
+                          Select a fund to enable upload
                         </p>
                       )}
                     </div>
@@ -1135,33 +1154,33 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                               if (blobFileInputRef.current) blobFileInputRef.current.value = "";
                               return;
                             }
-                            if (!blobMandateKey.trim()) {
+                            if (!blobSelectedFundId) {
                               setBlobUploadMessage({
-                                message: "Please enter a mandate key first.",
+                                message: "Please select a fund first.",
                                 type: "error",
                               });
                               if (blobFileInputRef.current) blobFileInputRef.current.value = "";
                               return;
                             }
-                            handleBlobUpload(blobMandateKey.trim(), file);
+                            handleBlobUpload(blobSelectedFundId, file);
                           }
                         }}
                       />
                       <Button
                         size="sm"
                         onClick={() => {
-                          if (!blobMandateKey.trim()) {
+                          if (!blobSelectedFundId) {
                             setBlobUploadMessage({
-                              message: "Please enter a mandate key first.",
+                              message: "Please select a fund first.",
                               type: "error",
                             });
                             return;
                           }
                           blobFileInputRef.current?.click();
                         }}
-                        disabled={blobLoading}
-                        variant={!blobMandateKey.trim() ? "outline" : "default"}
-                        className={!blobMandateKey.trim() ? "opacity-60" : ""}
+                        disabled={blobLoading || !blobSelectedFundId}
+                        variant={!blobSelectedFundId ? "outline" : "default"}
+                        className={!blobSelectedFundId ? "opacity-60" : ""}
                       >
                         <Upload className="h-4 w-4 mr-2" />
                         {blobLoading ? "Uploading..." : "Select & Upload"}
@@ -1169,21 +1188,21 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Supported formats: PDF, DOC, DOCX, XLS, XLSX (max 25MB)
+                    Supported formats: PDF, DOC, DOCX, XLS, XLSX (max 25MB). Files are associated with the selected fund.
                   </p>
                 </div>
                 {blobMandates.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No mandate templates uploaded yet.</p>
-                    <p className="text-xs mt-1">Click &quot;Refresh&quot; to load templates or upload one above.</p>
+                    <p>{blobSelectedFundId ? "No mandate templates for this fund." : "Select a fund to view or upload mandate templates."}</p>
+                    <p className="text-xs mt-1">{blobSelectedFundId ? "Upload a template above or click Refresh." : "Select a fund above to get started."}</p>
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>File Name</TableHead>
-                        <TableHead>Mandate Key</TableHead>
+                        <TableHead>Fund</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead className="text-right">Size</TableHead>
                         <TableHead>Uploaded</TableHead>
@@ -1199,7 +1218,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{blob.mandateKey || "-"}</Badge>
+                            <Badge variant="outline">{funds.find((f) => f.id === (blob.fundId || blobSelectedFundId))?.name || blob.fundId || blob.mandateKey || "-"}</Badge>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {blob.contentType?.includes("pdf")

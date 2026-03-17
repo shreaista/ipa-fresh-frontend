@@ -13,6 +13,7 @@ import {
 import { getAuthzContext } from "@/lib/authz";
 import { listFundMandates as listMockFundMandates, createFundMandate } from "@/lib/mock/fundMandates";
 import { listFundMandates as listBlobFundMandates } from "@/lib/storage/azure";
+import { listFundMandateBlobsByFundId } from "@/lib/storage/azureBlob";
 import { logAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
@@ -23,10 +24,27 @@ export async function GET(request: NextRequest) {
     const ctx = await getAuthzContext();
 
     const source = request.nextUrl.searchParams.get("source");
+    const fundId = request.nextUrl.searchParams.get("fundId");
     const mandateKey = request.nextUrl.searchParams.get("mandateKey");
 
     if (source === "blob") {
       requireRBACPermission(session, RBAC_PERMISSIONS.FUND_MANDATE_READ);
+
+      if (fundId) {
+        const blobs = await listFundMandateBlobsByFundId(tenantId, fundId);
+        const files = blobs.map((b) => ({
+          name: b.name,
+          blobName: b.blobPath,
+          uploadedAt: b.uploadedAt,
+          size: b.size,
+          contentType: b.contentType,
+          fundId: b.fundId,
+        }));
+        return NextResponse.json({
+          ok: true,
+          data: { files },
+        });
+      }
 
       const blobs = await listBlobFundMandates({
         tenantId,

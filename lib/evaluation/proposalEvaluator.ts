@@ -19,6 +19,7 @@ import {
 } from "@/lib/storage/azureBlob";
 import { listProposalDocuments } from "@/lib/storage/proposalDocuments";
 import { listFundMandates, type FundMandateBlob } from "@/lib/storage/azure";
+import { listFundMandateBlobsByFundId } from "@/lib/storage/azureBlob";
 import {
   runEvaluationWithProvider,
   isLLMConfigured,
@@ -63,6 +64,7 @@ export interface RunEvaluationParams {
   tenantId: string;
   proposalId: string;
   fundName: string;
+  fundId: string | null;
   mandateKey: string | null;
   evaluatedByUserId: string;
   evaluatedByEmail: string;
@@ -322,78 +324,82 @@ function generateStubEvaluation(
 export async function runEvaluation(
   params: RunEvaluationParams
 ): Promise<RunEvaluationResult> {
-  const { tenantId, proposalId, fundName, evaluatedByUserId, evaluatedByEmail } = params;
+  const { tenantId, proposalId, fundName, fundId, evaluatedByUserId, evaluatedByEmail } = params;
   let { mandateKey } = params;
 
   console.log(`[proposalEvaluator] Starting evaluation for proposal ${proposalId}`);
-  console.log(`[proposalEvaluator] tenantId=${tenantId}, fundName=${fundName}, mandateKey=${mandateKey || "(none)"}`);
+  console.log(`[proposalEvaluator] tenantId=${tenantId}, fundName=${fundName}, fundId=${fundId || "(none)"}, mandateKey=${mandateKey || "(none)"}`);
 
-  // NEW: Gather document metadata
+  // Gather document metadata
   const proposalDocsResult = await listProposalDocuments(tenantId, proposalId);
   const proposalDocs = proposalDocsResult.flat.filter(
     (doc) => !doc.blobPath.includes("/evaluations/")
   );
 
-  // Load mandate templates with robust fallback logic
+  // Load mandate templates: prefer fundId-based storage, fallback to mandateKey
   let mandateTemplates: FundMandateBlob[] = [];
   let mandateLoadFallbackReason: string | null = null;
 
-  // Step 1: Try to load mandate templates for the specified mandateKey
-  if (mandateKey) {
-    console.log(`[proposalEvaluator] Loading mandate templates for mandateKey: ${mandateKey}`);
+  // Step 1: Try fundId-based storage (tenants/{tenantId}/funds/{fundId}/mandates/)
+  if (fundId) {
+    console.log(`[proposalEvaluator] Loading mandate templates for fundId: ${fundId}`);
     try {
-      mandateTemplates = await listFundMandates({ tenantId, mandateKey });
+      const blobs = await listFundMandateBlobsByFundId(tenantId, fundId);
+      mandateTemplates = blobs.map((b) => ({
+        name: b.name,
+        mandateKey: b.fundId,
+        uploadedAt: b.uploadedAt,
+        blobName: b.blobPath,
+        size: b.size,
+        contentType: b.contentType,
+      }));
       if (mandateTemplates.length > 0) {
         console.log(
-          `[proposalEvaluator] Matched mandateKey: ${mandateKey}, found ${mandateTemplates.length} template(s)`
+          `[proposalEvaluator] Found ${mandateTemplates.length} template(s) for fundId: ${fundId}`
         );
         for (const t of mandateTemplates) {
           console.log(`[proposalEvaluator]   - ${t.name} (${t.contentType}, ${t.size} bytes, blobPath: ${t.blobName})`);
         }
       } else {
-        console.log(`[proposalEvaluator] No templates found for mandateKey: ${mandateKey}, trying fallback...`);
-        mandateLoadFallbackReason = `No templates uploaded for mandateKey: ${mandateKey}`;
+        mandateLoadFallbackReason = `No mandate files uploaded for this fund`;
       }
     } catch (error) {
-      console.error("[proposalEvaluator] Error listing mandate templates for key:", mandateKey, error);
-      mandateLoadFallbackReason = `Error loading templates for mandateKey ${mandateKey}: ${error instanceof Error ? error.message : "Unknown error"}`;
+      console.error("[proposalEvaluator] Error listing mandate templates for fundId:", fundId, error);
+      mandateLoadFallbackReason = `Error loading mandate files for fund: ${error instanceof Error ? error.message : "Unknown error"}`;
     }
-  } else {
-    console.log("[proposalEvaluator] No mandateKey provided, trying fallback to any uploaded templates...");
-    mandateLoadFallbackReason = "No mandateKey associated with proposal's fund";
   }
 
-  // Step 2: Fallback - if no templates found, list all mandate templates for the tenant
-  // This is POC-friendly behavior: use any available mandate template
+  // Step 2: Fallback to mandateKey-based storage (backward compatibility)
+  if (mandateTemplates.length === 0 && mandateKey) {
+    console.log(`[proposalEvaluator] Fallback: loading mandate templates for mandateKey: ${mandateKey}`);
+    try {
+      mandateTemplates = await listFundMandates({ tenantId, mandateKey });
+      if (mandateTemplates.length > 0) {
+        console.log(`[proposalEvaluator] Found ${mandateTemplates.length} template(s) for mandateKey: ${mandateKey}`);
+      }
+    } catch (error) {
+      console.error("[proposalEvaluator] Error listing mandate templates for mandateKey:", mandateKey, error);
+    }
+  }
+
+  // Step 3: Fallback - list all mandate templates for tenant (POC-friendly)
   if (mandateTemplates.length === 0) {
     console.log("[proposalEvaluator] Fallback: listing all mandate templates for tenant...");
     try {
       const allMandates = await listFundMandates({ tenantId });
       if (allMandates.length > 0) {
-        // Use the most recently uploaded mandate template(s) for the first available key
-        // Group by mandateKey and take the first group (already sorted newest first)
         const firstMandateKey = allMandates[0].mandateKey;
         mandateTemplates = allMandates.filter((m) => m.mandateKey === firstMandateKey);
-        
-        // Update mandateKey to reflect what was actually used
         if (!mandateKey && firstMandateKey) {
           mandateKey = firstMandateKey;
-          console.log(`[proposalEvaluator] Fallback: using mandateKey "${mandateKey}" (most recent uploaded)`);
         }
-        
-        console.log(
-          `[proposalEvaluator] Fallback: found ${mandateTemplates.length} template(s) for mandateKey: ${mandateKey}`
-        );
-        for (const t of mandateTemplates) {
-          console.log(`[proposalEvaluator]   - ${t.name} (${t.contentType}, ${t.size} bytes, blobPath: ${t.blobName})`);
-        }
+        console.log(`[proposalEvaluator] Fallback: found ${mandateTemplates.length} template(s)`);
       } else {
-        console.log("[proposalEvaluator] No mandate templates found for tenant - evaluation will proceed without mandate text");
-        mandateLoadFallbackReason = "No mandate templates uploaded for this tenant";
+        mandateLoadFallbackReason = mandateLoadFallbackReason || "No mandate templates uploaded for this tenant";
       }
     } catch (error) {
       console.error("[proposalEvaluator] Error listing all mandate templates:", error);
-      mandateLoadFallbackReason = `Error listing mandate templates: ${error instanceof Error ? error.message : "Unknown error"}`;
+      mandateLoadFallbackReason = mandateLoadFallbackReason || `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
     }
   }
 
