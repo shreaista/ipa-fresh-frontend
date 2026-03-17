@@ -1,6 +1,10 @@
 import "server-only";
 import { productionMode } from "@/lib/config/productionMode";
-
+import {
+  loadProposalsFromFileSync,
+  saveProposalsToFileSync,
+  type ProposalsPersistenceData,
+} from "@/lib/storage/proposalsPersistence";
 import {
   getQueueIdsForUser,
   getProposalIdsInQueues,
@@ -203,6 +207,28 @@ const SEED_PROPOSAL_IDS = new Set([
   "P-101", "P-102", "P-098", "P-099", "P-095", "P-096", "P-090", "P-091", "P-092", "P-103",
 ]);
 
+/** Load user-created proposals from durable storage and merge into in-memory array. */
+function initProposalsFromFile(): void {
+  const data = loadProposalsFromFileSync();
+  // Remove existing user-created from proposals (keep seed only)
+  for (let i = proposals.length - 1; i >= 0; i--) {
+    if (!SEED_PROPOSAL_IDS.has(proposals[i].id)) {
+      proposals.splice(i, 1);
+    }
+  }
+  // Add user-created from file
+  for (const p of data.userCreated) {
+    proposals.push(p);
+  }
+}
+
+/** Persist user-created proposals to durable storage. */
+function persistProposals(): void {
+  const userCreated = proposals.filter((p) => !SEED_PROPOSAL_IDS.has(p.id));
+  const data: ProposalsPersistenceData = { userCreated };
+  saveProposalsToFileSync(data);
+}
+
 function filterProposalsForProduction<T extends { id: string }>(items: T[]): T[] {
   if (!productionMode) return items;
   return items.filter((p) => !SEED_PROPOSAL_IDS.has(p.id));
@@ -245,6 +271,7 @@ export function createProposal(
   tenantId: string,
   input: CreateProposalInput
 ): CreateProposalResult {
+  initProposalsFromFile();
   const name = (input.name ?? "").trim();
   if (!name) {
     return { ok: false, error: "Proposal name is required" };
@@ -297,6 +324,7 @@ export function createProposal(
   };
 
   proposals.push(proposal);
+  persistProposals();
   return { ok: true, proposal };
 }
 
@@ -311,6 +339,7 @@ export interface ListProposalsParams {
 }
 
 export function listProposalsForUser(params: ListProposalsParams): Proposal[] {
+  initProposalsFromFile();
   const { tenantId, userId, role } = params;
 
   let tenantProposals = proposals.filter((p) => p.tenantId === tenantId);
@@ -334,6 +363,7 @@ export function listProposalsForUser(params: ListProposalsParams): Proposal[] {
 }
 
 export function listProposalsWithAssignmentForUser(params: ListProposalsParams): ProposalWithAssignment[] {
+  initProposalsFromFile();
   const { tenantId, role } = params;
 
   let tenantProposals = proposals.filter((p) => p.tenantId === tenantId);
@@ -376,6 +406,7 @@ export interface GetProposalResult {
 }
 
 export function getProposalForUser(params: GetProposalParams): GetProposalResult {
+  initProposalsFromFile();
   const { tenantId, userId, role, proposalId } = params;
 
   const proposal = proposals.find((p) => p.id === proposalId);
@@ -425,6 +456,7 @@ export interface ListAssessorQueueParams {
 export function listProposalsForAssessorAccess(
   params: ListAssessorQueueParams
 ): ProposalWithAssignment[] {
+  initProposalsFromFile();
   const { tenantId, userId } = params;
 
   const tenantProposals = proposals.filter((p) => p.tenantId === tenantId);
@@ -479,6 +511,7 @@ export interface AssignProposalResult {
 }
 
 export function assignProposal(params: AssignProposalParams): AssignProposalResult {
+  initProposalsFromFile();
   const { tenantId, proposalId, assignToUserId, assignToUserName, assignToQueueId, dueDate } = params;
 
   const proposal = proposals.find((p) => p.id === proposalId);
@@ -518,6 +551,10 @@ export function assignProposal(params: AssignProposalParams): AssignProposalResu
     proposal.status = "Assigned";
   }
 
+  if (!SEED_PROPOSAL_IDS.has(proposalId)) {
+    persistProposals();
+  }
+
   return {
     ok: true,
     assignedToUserId: assignToUserId,
@@ -527,5 +564,6 @@ export function assignProposal(params: AssignProposalParams): AssignProposalResu
 }
 
 export function getProposalById(proposalId: string): Proposal | undefined {
+  initProposalsFromFile();
   return proposals.find((p) => p.id === proposalId);
 }

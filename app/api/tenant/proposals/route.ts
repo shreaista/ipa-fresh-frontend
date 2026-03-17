@@ -7,26 +7,47 @@ import {
 } from "@/lib/authz";
 import {
   createProposal,
+  listProposalsWithAssignmentForUser,
   type ProposalStage,
 } from "@/lib/mock/proposals";
+import { PROPOSALS_FILE_PATH } from "@/lib/storage/proposalsPersistence";
 
-const demoProposals = [
-  { id: "P-101", name: "Community Arts Program", applicant: "Arts Alliance", fund: "General Fund", amount: 45000, status: "New", assessorId: null, tenantId: "demo-tenant" },
-  { id: "P-102", name: "Youth Sports Initiative", applicant: "Sports Foundation", fund: "Youth Programs", amount: 32000, status: "New", assessorId: null, tenantId: "demo-tenant" },
-  { id: "P-098", name: "Green Energy Project", applicant: "Eco Solutions", fund: "Innovation Grant", amount: 78000, status: "Assigned", assessorId: "user-assessor-1", tenantId: "demo-tenant" },
-  { id: "P-099", name: "Digital Literacy Program", applicant: "Tech For All", fund: "Community Dev", amount: 25000, status: "Assigned", assessorId: "user-assessor-2", tenantId: "demo-tenant" },
-  { id: "P-095", name: "Senior Wellness Center", applicant: "Elder Care Co", fund: "Healthcare Init", amount: 120000, status: "In Review", assessorId: "user-assessor-1", tenantId: "demo-tenant" },
-  { id: "P-096", name: "Food Security Network", applicant: "Hunger Relief", fund: "Emergency Reserve", amount: 55000, status: "In Review", assessorId: "user-assessor-2", tenantId: "demo-tenant" },
-  { id: "P-090", name: "Healthcare Access", applicant: "Health First", fund: "Healthcare Init", amount: 150000, status: "Approved", assessorId: "user-assessor-1", tenantId: "demo-tenant" },
-];
+const STORAGE_SOURCE = `proposalsStore (durable JSON: ${PROPOSALS_FILE_PATH})`;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireSession();
     requireUserRole(user, ["tenant_admin", "saas_admin"]);
     const tenantId = requireTenant(user);
 
-    const proposals = demoProposals.filter((p) => p.tenantId === tenantId);
+    const proposals = listProposalsWithAssignmentForUser({
+      tenantId,
+      userId: user.userId ?? "",
+      role: user.role ?? "tenant_admin",
+    });
+
+    const rawCount = proposals.length;
+    const proposalIds = proposals.map((p) => p.id);
+    const proposalNames = proposals.map((p) => p.name);
+
+    console.log("[Proposals API] GET", {
+      tenantId,
+      source: STORAGE_SOURCE,
+      rawCount,
+      proposalIds,
+      proposalNames,
+    });
+
+    const debug = request.nextUrl.searchParams.get("debug") === "1";
+    if (debug) {
+      return NextResponse.json({
+        ok: true,
+        tenantId,
+        source: STORAGE_SOURCE,
+        count: rawCount,
+        proposals: proposals.map((p) => ({ id: p.id, name: p.name, status: p.status, applicant: p.applicant })),
+      });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -63,6 +84,24 @@ export async function POST(request: NextRequest) {
     const fundId = body?.fundId;
     const description = body?.description;
 
+    const incomingPayload = {
+      name,
+      company,
+      sector,
+      stage,
+      geography,
+      businessModel,
+      amountRequested,
+      fundId,
+      description,
+    };
+
+    console.log("[Proposals API] POST", {
+      tenantId,
+      incomingPayload,
+      storageDestination: PROPOSALS_FILE_PATH,
+    });
+
     const result = createProposal(tenantId, {
       name: typeof name === "string" ? name : "",
       company: typeof company === "string" ? company : undefined,
@@ -79,11 +118,28 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.ok) {
+      console.error("[Proposals API] POST create failure:", result.error);
       return NextResponse.json(
         { ok: false, error: result.error || "Failed to create proposal" },
         { status: 400 }
       );
     }
+
+    const createdProposalId = result.proposal?.id;
+    const createdProposalName = result.proposal?.name;
+    const persistedCount = listProposalsWithAssignmentForUser({
+      tenantId,
+      userId: user.userId ?? "",
+      role: user.role ?? "tenant_admin",
+    }).length;
+
+    console.log("[Proposals API] POST success", {
+      tenantId,
+      createdProposalId,
+      createdProposalName,
+      storageDestination: PROPOSALS_FILE_PATH,
+      persistedTotalCount: persistedCount,
+    });
 
     return NextResponse.json({
       ok: true,
