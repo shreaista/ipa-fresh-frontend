@@ -85,6 +85,36 @@ export const EvaluationReportSchema = z.object({
   model: z.string(),
   version: z.string(),
   engineType: z.enum(["stub", "llm", "azure-openai"]),
+
+  // Proposal Validation (optional - runs before fund evaluation)
+  validationSummary: z
+    .object({
+      validationScore: z.number().min(0).max(100),
+      step: z.string(),
+      heuristic: z.object({
+        signals: z.object({
+          hasRevenue: z.boolean(),
+          hasForecast: z.boolean(),
+          hasForecast12m: z.boolean(),
+          hasForecast24m: z.boolean(),
+          hasForecast48m: z.boolean(),
+          stage: z.enum(["pre-revenue", "revenue", "growth", "unknown"]),
+          hasIP: z.boolean(),
+          hasCompetitors: z.boolean(),
+        }),
+        heuristicScoreAfterPenalties: z.number(),
+        penalties: z.array(z.string()),
+      }),
+      llm: z
+        .object({
+          stage: z.enum(["pre-revenue", "revenue", "growth", "unknown"]),
+          businessModelClarity: z.enum(["clear", "partial", "unclear", "unknown"]),
+          competitorPresence: z.enum(["identified", "mentioned", "none", "unknown"]),
+        })
+        .optional(),
+      warnings: z.array(z.string()),
+    })
+    .optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

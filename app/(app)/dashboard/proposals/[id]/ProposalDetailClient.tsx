@@ -132,6 +132,31 @@ interface EvaluationReport {
   // Structured scoring (optional for backward compatibility)
   structuredScores?: StructuredScores;
   scoringMethod?: "structured" | "fallback";
+  // Proposal Validation (runs before fund evaluation)
+  validationSummary?: {
+    validationScore: number;
+    step: string;
+    heuristic: {
+      signals: {
+        hasRevenue: boolean;
+        hasForecast: boolean;
+        hasForecast12m: boolean;
+        hasForecast24m: boolean;
+        hasForecast48m: boolean;
+        stage: "pre-revenue" | "revenue" | "growth" | "unknown";
+        hasIP: boolean;
+        hasCompetitors: boolean;
+      };
+      heuristicScoreAfterPenalties: number;
+      penalties: string[];
+    };
+    llm?: {
+      stage: "pre-revenue" | "revenue" | "growth" | "unknown";
+      businessModelClarity: "clear" | "partial" | "unclear" | "unknown";
+      competitorPresence: "identified" | "mentioned" | "none" | "unknown";
+    };
+    warnings: string[];
+  };
 }
 
 interface EvaluationMetadata {
@@ -1694,6 +1719,104 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Proposal Validation Summary */}
+            {displayedEvaluation.validationSummary && (
+              <div className="p-5 border-b bg-slate-50/50">
+                <div className="flex items-center gap-2 mb-4">
+                  <ShieldCheck className="h-4 w-4 text-slate-600" />
+                  <p className="text-sm font-medium">Proposal Validation Summary</p>
+                  <span className="text-xs text-muted-foreground">
+                    ({displayedEvaluation.validationSummary.step})
+                  </span>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${
+                        displayedEvaluation.validationSummary.validationScore >= 70
+                          ? "bg-emerald-100"
+                          : displayedEvaluation.validationSummary.validationScore >= 50
+                            ? "bg-amber-100"
+                            : "bg-red-100"
+                      }`}
+                    >
+                      <span
+                        className={`text-lg font-bold ${
+                          displayedEvaluation.validationSummary.validationScore >= 70
+                            ? "text-emerald-700"
+                            : displayedEvaluation.validationSummary.validationScore >= 50
+                              ? "text-amber-700"
+                              : "text-red-700"
+                        }`}
+                      >
+                        {displayedEvaluation.validationSummary.validationScore}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Validation Score</p>
+                      <p className="text-xs text-muted-foreground">
+                        Heuristic + LLM signals (0–100)
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Detected signals
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {displayedEvaluation.validationSummary.heuristic.signals.hasRevenue && (
+                        <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                          Revenue
+                        </span>
+                      )}
+                      {displayedEvaluation.validationSummary.heuristic.signals.hasForecast && (
+                        <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                          Forecast
+                        </span>
+                      )}
+                      {displayedEvaluation.validationSummary.heuristic.signals.hasIP && (
+                        <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                          IP
+                        </span>
+                      )}
+                      {displayedEvaluation.validationSummary.heuristic.signals.hasCompetitors && (
+                        <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                          Competitors
+                        </span>
+                      )}
+                      <span className="inline-flex items-center rounded-md bg-slate-200 px-2 py-0.5 text-xs text-slate-700">
+                        Stage: {displayedEvaluation.validationSummary.heuristic.signals.stage.replace("-", " ")}
+                      </span>
+                      {displayedEvaluation.validationSummary.llm && (
+                        <span className="inline-flex items-center rounded-md bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
+                          BM: {displayedEvaluation.validationSummary.llm.businessModelClarity}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {displayedEvaluation.validationSummary.heuristic.penalties.length > 0 && (
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-xs font-medium text-amber-700 mb-1">Penalties applied</p>
+                    <ul className="text-xs text-muted-foreground space-y-0.5">
+                      {displayedEvaluation.validationSummary.heuristic.penalties.map((p, i) => (
+                        <li key={i}>• {p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {displayedEvaluation.validationSummary.warnings.length > 0 && (
+                  <div className="mt-2">
+                    {displayedEvaluation.validationSummary.warnings.map((w, i) => (
+                      <p key={i} className="text-xs text-amber-600">
+                        {w}
+                      </p>
+                    ))}
                   </div>
                 )}
               </div>

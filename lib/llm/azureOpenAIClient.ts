@@ -382,3 +382,76 @@ export async function runAzureEvaluationLLM(
     };
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation Extraction (Proposal Validation Engine)
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { ValidationLLMResult } from "@/lib/evaluation/validationTypes";
+
+const VALIDATION_SYSTEM_PROMPT = `You are an expert analyst extracting structured data from investment proposals.
+
+Extract the following from the proposal text. Respond with valid JSON only, no additional text.`;
+
+const VALIDATION_USER_PROMPT = (text: string) => `## Proposal Text (excerpt)
+${text.slice(0, 8000)}
+
+## Required Output (JSON)
+{
+  "stage": "<'pre-revenue' | 'revenue' | 'growth' | 'unknown'>",
+  "businessModelClarity": "<'clear' | 'partial' | 'unclear' | 'unknown'>",
+  "competitorPresence": "<'identified' | 'mentioned' | 'none' | 'unknown'>"
+}
+
+- stage: Investment stage based on revenue, growth, and funding round context
+- businessModelClarity: How clearly the business model and monetization are explained
+- competitorPresence: Whether competitors are identified by name, merely mentioned, or absent
+
+Respond with ONLY the JSON object.`;
+
+function parseValidationResponse(content: string): ValidationLLMResult | null {
+  try {
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+    else if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
+    jsonStr = jsonStr.trim();
+
+    const parsed = JSON.parse(jsonStr) as Record<string, string>;
+    const stage = ["pre-revenue", "revenue", "growth", "unknown"].includes(parsed?.stage)
+      ? (parsed.stage as ValidationLLMResult["stage"])
+      : "unknown";
+    const businessModelClarity = ["clear", "partial", "unclear", "unknown"].includes(
+      parsed?.businessModelClarity
+    )
+      ? (parsed.businessModelClarity as ValidationLLMResult["businessModelClarity"])
+      : "unknown";
+    const competitorPresence = ["identified", "mentioned", "none", "unknown"].includes(
+      parsed?.competitorPresence
+    )
+      ? (parsed.competitorPresence as ValidationLLMResult["competitorPresence"])
+      : "unknown";
+
+    return { stage, businessModelClarity, competitorPresence };
+  } catch {
+    return null;
+  }
+}
+
+export async function runAzureValidationExtraction(
+  proposalText: string
+): Promise<ValidationLLMResult | null> {
+  if (!isAzureOpenAIConfigured()) return null;
+  try {
+    const config = getAzureOpenAIConfig();
+    const messages: Array<{ role: "system" | "user"; content: string }> = [
+      { role: "system", content: VALIDATION_SYSTEM_PROMPT },
+      { role: "user", content: VALIDATION_USER_PROMPT(proposalText) },
+    ];
+    const response = await callAzureOpenAI(messages, config);
+    return parseValidationResponse(response.content);
+  } catch (error) {
+    console.warn("[azureOpenAIClient] Validation extraction failed:", error);
+    return null;
+  }
+}

@@ -30,6 +30,7 @@ import {
   extractContentForEvaluation,
   type BlobInfo,
 } from "./textExtraction";
+import { runProposalValidation } from "./proposalValidation";
 import { buildRAGEvaluationInput } from "./textChunking";
 import { type EvaluationReport } from "./types";
 import {
@@ -441,6 +442,12 @@ export async function runEvaluation(
 
     const extractedContent = await extractContentForEvaluation(mandateBlobs, proposalBlobs);
 
+    // Step: Validate Proposal (runs before fund evaluation)
+    const validationSummary = await runProposalValidation(extractedContent.proposalText);
+    console.log(
+      `[proposalEvaluator] Validation complete: score=${validationSummary.validationScore}, step=${validationSummary.step}`
+    );
+
     // Log extraction results summary
     console.log(`[proposalEvaluator] Extraction complete - mandate: ${extractedContent.mandateText.length} chars, proposal: ${extractedContent.proposalText.length} chars`);
     
@@ -551,6 +558,24 @@ export async function runEvaluation(
         model: llmResult.model,
         version: "2.0.0",
         engineType,
+
+        validationSummary: {
+          validationScore: validationSummary.validationScore,
+          step: validationSummary.step,
+          heuristic: {
+            signals: validationSummary.heuristic.signals,
+            heuristicScoreAfterPenalties: validationSummary.heuristic.heuristicScoreAfterPenalties,
+            penalties: validationSummary.heuristic.penalties,
+          },
+          llm: validationSummary.llm
+            ? {
+                stage: validationSummary.llm.stage,
+                businessModelClarity: validationSummary.llm.businessModelClarity,
+                competitorPresence: validationSummary.llm.competitorPresence,
+              }
+            : undefined,
+          warnings: validationSummary.warnings,
+        },
       };
     } else {
       // LLM failed, fall back to stub with error info in extractionWarnings
@@ -622,11 +647,47 @@ export async function runEvaluation(
         model: "stub-fallback",
         version: "2.0.0",
         engineType: "stub",
+
+        validationSummary: {
+          validationScore: validationSummary.validationScore,
+          step: validationSummary.step,
+          heuristic: {
+            signals: validationSummary.heuristic.signals,
+            heuristicScoreAfterPenalties: validationSummary.heuristic.heuristicScoreAfterPenalties,
+            penalties: validationSummary.heuristic.penalties,
+          },
+          llm: validationSummary.llm
+            ? {
+                stage: validationSummary.llm.stage,
+                businessModelClarity: validationSummary.llm.businessModelClarity,
+                competitorPresence: validationSummary.llm.competitorPresence,
+              }
+            : undefined,
+          warnings: validationSummary.warnings,
+        },
       };
     }
   } else {
     // No LLM provider configured, use stub
     console.warn("[proposalEvaluator] No LLM provider configured, using stub evaluation");
+
+    // Still run proposal validation (heuristic-only when no LLM)
+    let validationSummary: Awaited<ReturnType<typeof runProposalValidation>>;
+    if (proposalDocs.length > 0) {
+      const proposalBlobsForValidation: BlobInfo[] = proposalDocs.map((d) => ({
+        blobPath: d.blobPath,
+        contentType: d.contentType,
+        filename: d.filename,
+        uploadedAt: d.uploadedAt,
+      }));
+      const { extractContentForEvaluation: extractForValidation } = await import(
+        "./textExtraction"
+      );
+      const extracted = await extractForValidation([], proposalBlobsForValidation);
+      validationSummary = await runProposalValidation(extracted.proposalText);
+    } else {
+      validationSummary = await runProposalValidation("");
+    }
 
     const stubResult = generateStubEvaluation(
       proposalDocs.length,
@@ -681,6 +742,24 @@ export async function runEvaluation(
       model: "stub",
       version: "2.0.0",
       engineType: "stub",
+
+      validationSummary: {
+        validationScore: validationSummary.validationScore,
+        step: validationSummary.step,
+        heuristic: {
+          signals: validationSummary.heuristic.signals,
+          heuristicScoreAfterPenalties: validationSummary.heuristic.heuristicScoreAfterPenalties,
+          penalties: validationSummary.heuristic.penalties,
+        },
+        llm: validationSummary.llm
+          ? {
+              stage: validationSummary.llm.stage,
+              businessModelClarity: validationSummary.llm.businessModelClarity,
+              competitorPresence: validationSummary.llm.competitorPresence,
+            }
+          : undefined,
+        warnings: validationSummary.warnings,
+      },
     };
   }
 
