@@ -476,7 +476,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
   const [evaluationMessage, setEvaluationMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   // Proposal validation (simple validate endpoint)
-  const [validationResult, setValidationResult] = useState<{ score: number; findings: string[] } | null>(null);
+  const [validationResult, setValidationResult] = useState(null);
   const [validating, setValidating] = useState(false);
 
   // Helper to sort evaluations by evaluatedAt DESC (newest first)
@@ -529,22 +529,16 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
   // Run proposal validation (simple keyword check)
   const handleValidateProposal = async () => {
-    if (!proposal) return;
+    const id = proposal?.id;
+    if (!id) return;
     setValidating(true);
     setValidationResult(null);
     try {
-      const res = await fetch(`/api/proposals/${proposal.id}/validate`, {
+      const res = await fetch(`/api/proposals/${id}/validate`, {
         method: "POST",
       });
       const data = await res.json();
-      if (data.ok) {
-        setValidationResult({
-          score: data.data.score,
-          findings: data.data.findings || [],
-        });
-      } else {
-        setEvaluationMessage({ text: data.error || "Validation failed", type: "error" });
-      }
+      setValidationResult(data);
     } catch {
       setEvaluationMessage({ text: "Network error during validation", type: "error" });
     }
@@ -1491,6 +1485,25 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
         )}
       </DataCard>
 
+      {/* Proposal Validation Summary - above Proposal Evaluation */}
+      {validationResult?.ok && validationResult?.data && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Proposal Validation Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <strong>Validation Score:</strong> {validationResult.data.score}
+            </div>
+            <ul className="list-disc pl-5 space-y-1">
+              {(validationResult.data.findings || []).map((f: string, i: number) => (
+                <li key={i}>{f}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {/* NEW: Proposal Evaluation Card */}
       <DataCard
         title="Proposal Evaluation"
@@ -1610,43 +1623,6 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               : "bg-red-50 text-red-700 border-red-100"
           }`}>
             {evaluationMessage.text}
-          </div>
-        )}
-
-        {/* Proposal Validation Summary (standalone - when no evaluation yet) */}
-        {!displayedEvaluation && validationResult && (
-          <div className="p-5 border-b bg-slate-50/50">
-            <div className="flex items-center gap-2 mb-4">
-              <ShieldCheck className="h-4 w-4 text-slate-600" />
-              <p className="text-sm font-medium">Proposal Validation Summary</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div
-                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${
-                  validationResult.score >= 70 ? "bg-emerald-100" : validationResult.score >= 50 ? "bg-amber-100" : "bg-red-100"
-                }`}
-              >
-                <span className={`text-lg font-bold ${
-                  validationResult.score >= 70 ? "text-emerald-700" : validationResult.score >= 50 ? "text-amber-700" : "text-red-700"
-                }`}>
-                  {validationResult.score}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Validation Score</p>
-                <p className="text-xs text-muted-foreground">Based on revenue, forecast, and competitor presence</p>
-              </div>
-            </div>
-            {validationResult.findings.length > 0 && (
-              <div className="mt-3 pt-3 border-t">
-                <p className="text-xs font-medium text-amber-700 mb-1">Findings</p>
-                <ul className="text-sm text-muted-foreground space-y-0.5">
-                  {validationResult.findings.map((f, i) => (
-                    <li key={i}>• {f}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         )}
 
