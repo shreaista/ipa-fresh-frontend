@@ -26,11 +26,27 @@ export const mockUsers: MockUser[] = [
     tenantId: "tenant-001",
   },
   {
+    id: "user-004",
+    email: "fundmanager@ipa.com",
+    password: "Fund#123",
+    name: "Fund Manager",
+    role: "fund_manager",
+    tenantId: "tenant-001",
+  },
+  {
     id: "user-003",
     email: "assessor@ipa.com",
     password: "Assess#123",
-    name: "Assessor User",
+    name: "Analyst",
     role: "assessor",
+    tenantId: "tenant-001",
+  },
+  {
+    id: "user-005",
+    email: "viewer@ipa.com",
+    password: "View#123",
+    name: "Viewer",
+    role: "viewer",
     tenantId: "tenant-001",
   },
 ];

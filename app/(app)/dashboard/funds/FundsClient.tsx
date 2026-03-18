@@ -762,11 +762,17 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                   Created {new Date(fund.createdAt).toLocaleDateString()}
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t">
+                <div className="flex items-center justify-between pt-3 border-t gap-2">
                   <Link href={`/dashboard/funds/${fund.id}/mandates`}>
                     <Button variant="outline" size="sm" className="h-8">
                       <ScrollText className="h-3.5 w-3.5 mr-1.5" />
-                      Manage Mandates
+                      Mandates
+                    </Button>
+                  </Link>
+                  <Link href={`/dashboard/funds/${fund.id}/config`}>
+                    <Button variant="outline" size="sm" className="h-8">
+                      <Settings className="h-3.5 w-3.5 mr-1.5" />
+                      Configure
                     </Button>
                   </Link>
                   <DropdownMenu>
@@ -776,13 +782,13 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => router.push(`/dashboard/funds/${fund.id}/config`)}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configuration
+                      </DropdownMenuItem>
                       <DropdownMenuItem>
                         <Edit className="h-4 w-4 mr-2" />
                         Edit Fund
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Settings
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="text-amber-600">
@@ -849,13 +855,13 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/funds/${fund.id}/config`)}>
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configuration
+                        </DropdownMenuItem>
                         <DropdownMenuItem>
                           <Edit className="h-4 w-4 mr-2" />
                           Edit Fund
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Settings className="h-4 w-4 mr-2" />
-                          Settings
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-amber-600">
@@ -1007,11 +1013,11 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {mandate.status !== "active" && (
                                 <DropdownMenuItem onClick={() => handleStatusChange(mandate.id, "active")}>

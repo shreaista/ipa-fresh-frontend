@@ -22,6 +22,7 @@ import {
   ScrollText,
   Loader2,
   AlertCircle,
+  Settings,
 } from "lucide-react";
 import type { Fund } from "@/lib/mock/fundsStore";
 import type { FundMandateTemplate, FundMandateStatus } from "@/lib/mock/fundMandates";
@@ -110,12 +111,20 @@ export default function FundMandatesClient({
         title={`Manage Mandates: ${fund.name}`}
         subtitle={`Link and unlink mandate templates for ${fund.name}`}
         actions={
-          <Link href="/dashboard/funds">
-            <Button variant="outline">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Funds
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href={`/dashboard/funds/${fund.id}/config`}>
+              <Button variant="outline">
+                <Settings className="h-4 w-4 mr-2" />
+                Configuration
+              </Button>
+            </Link>
+            <Link href="/dashboard/funds">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Funds
+              </Button>
+            </Link>
+          </div>
         }
       />
 

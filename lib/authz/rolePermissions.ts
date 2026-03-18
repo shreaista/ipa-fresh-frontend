@@ -61,12 +61,28 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     LLM_USE,
   ],
 
-  // Assessor: read + upload + report + llm
+  // Fund Manager: IC dashboard + decision tools (no config/audit)
+  fund_manager: [
+    PROPOSAL_READ,
+    PROPOSAL_ASSIGN,
+    QUEUE_MANAGE,
+    UPLOAD_CREATE,
+    REPORT_GENERATE,
+    LLM_USE,
+  ],
+
+  // Assessor (Analyst): proposal workspace
   assessor: [
     PROPOSAL_READ,
     UPLOAD_CREATE,
     REPORT_GENERATE,
     LLM_USE,
+  ],
+
+  // Viewer: read-only
+  viewer: [
+    PROPOSAL_READ,
+    REPORT_GENERATE,
   ],
 };
 

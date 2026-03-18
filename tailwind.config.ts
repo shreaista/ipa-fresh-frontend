@@ -18,6 +18,7 @@ const config: Config = {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -45,11 +46,20 @@ const config: Config = {
           border: "hsl(var(--sidebar-border))",
           accent: "hsl(var(--sidebar-accent))",
         },
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        risk: "hsl(var(--risk))",
       },
       borderRadius: {
+        xl: "var(--radius-lg)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        soft: "var(--shadow-soft)",
+        card: "var(--shadow-card)",
+        "card-hover": "var(--shadow-card-hover)",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],

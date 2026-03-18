@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getMyAuthz } from "@/lib/authz";
+import { getMyAuthz, isReadOnlyRole } from "@/lib/authz";
 import { getNavItemsForRole, filterNavByPermissions } from "@/lib/nav";
 import { AppShell } from "@/components/app-shell";
 import { getSessionSafe } from "@/lib/session";
@@ -34,6 +34,7 @@ export default async function DashboardLayout({
     name: user?.name ?? "",
     email: user?.email ?? "",
     role,
+    isReadOnly: isReadOnlyRole(role),
   };
 
   return (

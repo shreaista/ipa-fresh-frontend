@@ -14,7 +14,10 @@ export type IconKey =
   | "clipboard-list"
   | "settings"
   | "scroll-text"
-  | "list-checks";
+  | "list-checks"
+  | "target"
+  | "message-square"
+  | "history";
 
 export interface NavItem {
   key: string;
@@ -43,9 +46,12 @@ const SAAS_ADMIN_TENANT: NavItem[] = [
   { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
   { key: "tenants", label: "Tenants", href: "/dashboard/tenants", iconKey: "building-2", permissionKey: "tenant:read", roles: ["saas_admin"] },
   { key: "funds", label: "Funds", href: "/dashboard/funds", iconKey: "wallet", roles: ["tenant_admin", "saas_admin"] },
+  { key: "fund-manager", label: "Fund Manager", href: "/dashboard/fund-manager", iconKey: "target", permissionKey: "proposal:read", roles: ["tenant_admin", "saas_admin"] },
   { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
   { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+  { key: "audit", label: "Audit Log", href: "/dashboard/audit", iconKey: "history", roles: ["tenant_admin", "saas_admin"] },
   { key: "mandates", label: "Mandate Templates", href: "/dashboard/funds/mandates", iconKey: "scroll-text", permissionKey: "fund:mandate:read", roles: ["tenant_admin", "saas_admin"] },
+  { key: "prompts", label: "Prompt Management", href: "/dashboard/prompts", iconKey: "message-square", roles: ["tenant_admin", "saas_admin"] },
   { key: "queues", label: "Queues (Advanced)", href: "/dashboard/queues", iconKey: "list-checks", permissionKey: "queue:manage", roles: ["tenant_admin", "saas_admin"] },
   { key: "users", label: "Users", href: "/dashboard/users", iconKey: "users", permissionKey: "user:read" },
   { key: "subscriptions", label: "Subscriptions", href: "/dashboard/subscriptions", iconKey: "credit-card", roles: ["saas_admin"] },
@@ -58,16 +64,38 @@ export const NAV_BY_ROLE: Record<string, NavItem[]> = {
   tenant_admin: [
     { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
     { key: "funds", label: "Funds", href: "/dashboard/funds", iconKey: "wallet", roles: ["tenant_admin", "saas_admin"] },
+    { key: "fund-manager", label: "Fund Manager", href: "/dashboard/fund-manager", iconKey: "target", permissionKey: "proposal:read", roles: ["tenant_admin", "saas_admin"] },
     { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text", permissionKey: "proposal:read" },
     { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+    { key: "audit", label: "Audit Log", href: "/dashboard/audit", iconKey: "history", roles: ["tenant_admin", "saas_admin"] },
     { key: "mandates", label: "Mandate Templates", href: "/dashboard/funds/mandates", iconKey: "scroll-text", permissionKey: "fund:mandate:read", roles: ["tenant_admin", "saas_admin"] },
+    { key: "prompts", label: "Prompt Management", href: "/dashboard/prompts", iconKey: "message-square", roles: ["tenant_admin", "saas_admin"] },
     { key: "queues", label: "Queues (Advanced)", href: "/dashboard/queues", iconKey: "list-checks", permissionKey: "queue:manage", roles: ["tenant_admin", "saas_admin"] },
     { key: "users", label: "Users", href: "/dashboard/users", iconKey: "users", permissionKey: "user:read" },
     { key: "costs", label: "Costs", href: "/dashboard/costs", iconKey: "dollar-sign", permissionKey: "costs:read" },
   ],
+  // Fund Manager: IC dashboard + decision tools (no config/audit/funds/mandates/prompts/users)
+  fund_manager: [
+    { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+    { key: "fund-manager", label: "Fund Manager", href: "/dashboard/fund-manager", iconKey: "target" },
+    { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
+    { key: "queues", label: "Queues", href: "/dashboard/queues", iconKey: "list-checks" },
+    { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+  ],
+
+  // Analyst: proposal workspace
   assessor: [
     { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
     { key: "queue", label: "My Queue", href: "/dashboard/queue", iconKey: "clipboard-list", roles: ["assessor"] },
+    { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
+    { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
+  ],
+
+  // Viewer: read-only dashboards
+  viewer: [
+    { key: "overview", label: "Overview", href: "/dashboard", iconKey: "layout-dashboard" },
+    { key: "fund-manager", label: "Fund Manager", href: "/dashboard/fund-manager", iconKey: "target" },
+    { key: "proposals", label: "Proposals", href: "/dashboard/proposals", iconKey: "file-text" },
     { key: "reports", label: "Reports", href: "/dashboard/reports", iconKey: "bar-chart-3" },
   ],
 };

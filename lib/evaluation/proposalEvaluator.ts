@@ -51,6 +51,7 @@ export interface EvaluationMetadata {
   evaluationId: string;
   evaluatedAt: string;
   fitScore: number | null;
+  validationScore?: number;
   confidence?: "low" | "medium" | "high";
   model?: string;
   engineType?: "stub" | "llm" | "azure-openai";
@@ -58,6 +59,7 @@ export interface EvaluationMetadata {
     proposalDocuments: number;
     mandateTemplates: number;
   };
+  risks?: string[];
   timestamp: string;
 }
 
@@ -202,6 +204,12 @@ export async function listEvaluations(
                   ? report.inputs.mandateTemplates
                   : 0,
               };
+            }
+            if (report.validationSummary && typeof report.validationSummary.validationScore === "number") {
+              metadata.validationScore = report.validationSummary.validationScore;
+            }
+            if (report.risks && Array.isArray(report.risks)) {
+              metadata.risks = report.risks;
             }
           }
         }

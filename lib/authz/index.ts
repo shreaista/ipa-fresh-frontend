@@ -3,7 +3,7 @@ import "server-only";
 // Roles
 export { ROLES, ROLE_META } from "./roles";
 export type { RoleKey, RoleMeta } from "./roles";
-export { isValidRole, isTenantScopedRole } from "./roles";
+export { isValidRole, isTenantScopedRole, isReadOnlyRole } from "./roles";
 
 // Permissions
 export {

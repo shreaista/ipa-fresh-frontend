@@ -58,7 +58,7 @@ export const ALL_PERMISSIONS: PermissionKey[] = Object.values(PERMISSIONS);
 // Role → Permissions Mapping
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type RoleKey = "saas_admin" | "tenant_admin" | "assessor";
+export type RoleKey = "saas_admin" | "tenant_admin" | "fund_manager" | "assessor" | "viewer";
 
 export const ROLE_PERMISSION_MAP: Record<RoleKey, readonly PermissionKey[]> = {
   saas_admin: [
@@ -104,15 +104,31 @@ export const ROLE_PERMISSION_MAP: Record<RoleKey, readonly PermissionKey[]> = {
     PERMISSIONS.LLM_USE,
   ],
 
+  fund_manager: [
+    PERMISSIONS.PROPOSAL_READ,
+    PERMISSIONS.PROPOSAL_CREATE,
+    PERMISSIONS.PROPOSAL_ASSIGN,
+    PERMISSIONS.QUEUE_MANAGE,
+    PERMISSIONS.UPLOAD_CREATE,
+    PERMISSIONS.REPORT_GENERATE,
+    PERMISSIONS.LLM_USE,
+    PERMISSIONS.PROPOSAL_DOCUMENT_UPLOAD,
+    PERMISSIONS.PROPOSAL_DOCUMENT_READ,
+  ],
+
   assessor: [
     PERMISSIONS.PROPOSAL_READ,
     PERMISSIONS.PROPOSAL_VIEW_ASSIGNED,
     PERMISSIONS.UPLOAD_CREATE,
     PERMISSIONS.REPORT_GENERATE,
     PERMISSIONS.LLM_USE,
-    // Proposal document permissions (read + upload for assessors assigned to proposal)
     PERMISSIONS.PROPOSAL_DOCUMENT_UPLOAD,
     PERMISSIONS.PROPOSAL_DOCUMENT_READ,
+  ],
+
+  viewer: [
+    PERMISSIONS.PROPOSAL_READ,
+    PERMISSIONS.REPORT_GENERATE,
   ],
 };
 

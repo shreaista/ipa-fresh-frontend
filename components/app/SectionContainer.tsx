@@ -24,7 +24,7 @@ export function SectionContainer({
               <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
             )}
             {description && (
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <p className="text-sm text-muted-foreground mt-0.5 font-normal">
                 {description}
               </p>
             )}

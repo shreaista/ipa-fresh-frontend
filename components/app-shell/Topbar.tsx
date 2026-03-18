@@ -20,6 +20,7 @@ export interface UserInfo {
   name: string;
   email: string;
   role: string;
+  isReadOnly?: boolean;
 }
 
 interface TopbarProps {
@@ -29,11 +30,16 @@ interface TopbarProps {
   onMenuClick: () => void;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  saas_admin: "SaaS Admin",
+  tenant_admin: "Admin",
+  fund_manager: "Fund Manager",
+  assessor: "Analyst",
+  viewer: "Viewer",
+};
+
 function formatRole(role: string): string {
-  return role
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  return ROLE_LABELS[role] ?? role.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
 export function Topbar({ user, pageTitle, activeTenantId, onMenuClick }: TopbarProps) {
@@ -48,7 +54,9 @@ export function Topbar({ user, pageTitle, activeTenantId, onMenuClick }: TopbarP
   const showTenantSwitcher =
     user.role === "saas_admin" ||
     user.role === "tenant_admin" ||
-    user.role === "assessor";
+    user.role === "fund_manager" ||
+    user.role === "assessor" ||
+    user.role === "viewer";
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 lg:px-6">
@@ -122,7 +130,7 @@ export function Topbar({ user, pageTitle, activeTenantId, onMenuClick }: TopbarP
                 className="fixed inset-0 z-40"
                 onClick={() => setUserMenuOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border bg-card shadow-lg z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl border border-border/80 bg-card shadow-[var(--shadow-card-hover)] z-50 overflow-hidden">
                 <div className="p-4 border-b bg-muted/30">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">

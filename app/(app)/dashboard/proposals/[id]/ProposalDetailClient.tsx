@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { PageHeader, StatusBadge, DataCard, EmptyState } from "@/components/app";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +50,12 @@ import {
   Eye,
   FileOutput,
   GitCompare,
+  HelpCircle,
+  Pencil,
+  Save,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
 } from "lucide-react";
 import type { Proposal, ProposalStatus } from "@/lib/mock/proposals";
 import {
@@ -58,6 +65,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 // Types for fund selection
 interface FundOption {
@@ -241,6 +257,7 @@ const statusVariants: Record<ProposalStatus, "muted" | "info" | "warning" | "suc
   "In Review": "warning",
   Approved: "success",
   Declined: "error",
+  Deferred: "muted",
 };
 
 const statusIcons: Record<ProposalStatus, LucideIcon> = {
@@ -249,6 +266,7 @@ const statusIcons: Record<ProposalStatus, LucideIcon> = {
   "In Review": Clock,
   Approved: CheckCircle,
   Declined: XCircle,
+  Deferred: Clock,
 };
 
 function formatAmount(amount: number): string {
@@ -257,6 +275,55 @@ function formatAmount(amount: number): string {
     currency: "USD",
     minimumFractionDigits: 0,
   }).format(amount);
+}
+
+function MemoSection({
+  title,
+  icon: Icon,
+  content,
+  explainKey,
+  explainContent,
+  expanded,
+  onToggle,
+}: {
+  title: string;
+  icon: LucideIcon;
+  content: React.ReactNode;
+  explainKey: string;
+  explainContent: string;
+  expanded: Record<string, boolean>;
+  onToggle: (key: string) => void;
+}) {
+  const isExpanded = expanded[explainKey];
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
+            <Icon className="h-4 w-4 text-primary" />
+          </div>
+          <h3 className="text-base font-semibold">{title}</h3>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-foreground h-8 gap-1"
+          onClick={() => onToggle(explainKey)}
+        >
+          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          Explain this
+        </Button>
+      </div>
+      <div className="mt-3 pl-10 text-sm leading-relaxed">
+        {typeof content === "string" ? <p className="text-foreground">{content}</p> : content}
+      </div>
+      {isExpanded && (
+        <div className="mt-3 pl-10 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          {explainContent}
+        </div>
+      )}
+    </section>
+  );
 }
 
 interface CurrentAssignment {
@@ -282,11 +349,12 @@ interface ProposalDetailClientProps {
   proposal: Proposal | null;
   canAssign: boolean;
   canManageDocuments?: boolean;
+  isReadOnly?: boolean;
   currentAssignment?: CurrentAssignment;
   error?: string;
 }
 
-export default function ProposalDetailClient({ proposal, canAssign, canManageDocuments = false, currentAssignment, error }: ProposalDetailClientProps) {
+export default function ProposalDetailClient({ proposal, canAssign, canManageDocuments = false, isReadOnly = false, currentAssignment, error }: ProposalDetailClientProps) {
   // Document management state
   const [documents, setDocuments] = useState<ProposalDocumentBlob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -476,8 +544,24 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
   const [evaluationMessage, setEvaluationMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   // Proposal validation (simple validate endpoint)
-  const [validationResult, setValidationResult] = useState(null);
+  const [validationResult, setValidationResult] = useState<{ ok?: boolean; data?: { score: number; findings: string[] } } | null>(null);
   const [validating, setValidating] = useState(false);
+
+  // Extracted content preview
+  const [extractedContent, setExtractedContent] = useState<{ documents: { filename: string; text: string; isPlaceholder?: boolean; warning?: string }[]; combinedText: string } | null>(null);
+  const [extractLoading, setExtractLoading] = useState(false);
+
+  // Analyst inline editing
+  const [analystSummary, setAnalystSummary] = useState("");
+  const [analystNotes, setAnalystNotes] = useState("");
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+
+  // Explain AI dialog
+  const [explainAiOpen, setExplainAiOpen] = useState(false);
+
+  // Expandable "Explain this" sections in AI Memo
+  const [memoExpanded, setMemoExpanded] = useState<Record<string, boolean>>({});
 
   // Helper to sort evaluations by evaluatedAt DESC (newest first)
   const sortEvaluationsDesc = (evals: EvaluationMetadata[]): EvaluationMetadata[] => {
@@ -544,6 +628,39 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
     }
     setValidating(false);
   };
+
+  // Load extracted content for preview
+  const loadExtractedContent = useCallback(async () => {
+    const id = proposal?.id;
+    if (!id) return;
+    setExtractLoading(true);
+    try {
+      const res = await fetch(`/api/proposals/${id}/extract`);
+      const data = await res.json();
+      if (data.ok && data.data) {
+        setExtractedContent(data.data);
+      }
+    } catch {
+      setExtractedContent(null);
+    }
+    setExtractLoading(false);
+  }, [proposal?.id]);
+
+  // Load extracted content when proposal/documents change; defer to avoid sync setState in effect
+  useEffect(() => {
+    const shouldLoad = Boolean(proposal?.id && documents.length > 0);
+    queueMicrotask(() => {
+      if (shouldLoad) {
+        loadExtractedContent();
+      } else {
+        setExtractedContent(null);
+      }
+    });
+  }, [proposal?.id, documents.length, loadExtractedContent]);
+
+  // Derived analyst summary: when not editing, show evaluation summary; when editing, show local draft
+  const displayedSummary =
+    editingSummary ? analystSummary : (displayedEvaluation?.proposalSummary ?? "");
 
   // NEW: Run evaluation
   const handleRunEvaluation = async () => {
@@ -899,7 +1016,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
       <PageHeader
         title={proposal.name}
-        subtitle={`Proposal ${proposal.id}`}
+        subtitle={`Analyst Workspace · ${proposal.id}`}
         actions={
           <div className="flex items-center gap-2">
             {proposal.status === "New" && (
@@ -923,19 +1040,6 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           </div>
         }
       />
-
-      {/* Step-by-step flow indicator */}
-      <div className="rounded-lg border bg-muted/30 px-4 py-3">
-        <p className="text-xs font-medium text-muted-foreground mb-2">Proposal evaluation flow</p>
-        <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground list-decimal list-inside">
-          <li>Select Fund</li>
-          <li>Review Mandate Files</li>
-          <li>Upload Proposal Documents</li>
-          <li>Validate Proposal</li>
-          <li>Evaluate Proposal</li>
-          <li>Generate Evaluation Report</li>
-        </ol>
-      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -1338,6 +1442,29 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
         )}
       </DataCard>
 
+      {/* Analyst Workspace Tabs */}
+      <Tabs defaultValue="documents" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsTrigger value="documents" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="validation" className="gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Validation
+          </TabsTrigger>
+          <TabsTrigger value="evaluation" className="gap-2">
+            <Target className="h-4 w-4" />
+            Evaluation
+          </TabsTrigger>
+          <TabsTrigger value="memo" className="gap-2">
+            <FileOutput className="h-4 w-4" />
+            AI Memo
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Documents Tab: Upload Panel + Extracted Data Preview */}
+        <TabsContent value="documents" className="space-y-6 mt-4">
       {/* NEW: Proposal Documents Card */}
       <DataCard
         title="Proposal Documents"
@@ -1485,21 +1612,238 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
         )}
       </DataCard>
 
+      {/* Extracted Data Preview */}
+      <DataCard
+        title="Extracted Data Preview"
+        description="Parsed content from uploaded documents"
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadExtractedContent}
+            disabled={extractLoading || documents.length === 0}
+          >
+            {extractLoading ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-1" />
+            )}
+            Refresh
+          </Button>
+        }
+      >
+        {documents.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Upload documents to see extracted content.</p>
+        ) : extractLoading && !extractedContent ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Extracting...</span>
+          </div>
+        ) : extractedContent ? (
+          <div className="space-y-4">
+            {extractedContent.documents.map((doc, i) => (
+              <div key={i} className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-sm font-medium mb-2">{doc.filename}</p>
+                {doc.warning && (
+                  <p className="text-xs text-amber-600 mb-2">⚠ {doc.warning}</p>
+                )}
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto font-sans">
+                  {doc.text || "(No text extracted)"}
+                </pre>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Click Refresh to extract content.</p>
+        )}
+      </DataCard>
+        </TabsContent>
+
+        {/* Validation Tab */}
+        <TabsContent value="validation" className="space-y-6 mt-4">
+          <DataCard
+            title="Proposal Validation Summary"
+            description="Run validation to check proposal completeness"
+            actions={
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleValidateProposal}
+                disabled={validating || documents.length === 0}
+              >
+                {validating ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                )}
+                Validate Proposal
+              </Button>
+            }
+          >
+            {validationResult?.ok && validationResult?.data ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-full ${
+                    validationResult.data.score >= 70 ? "bg-emerald-100" :
+                    validationResult.data.score >= 50 ? "bg-amber-100" : "bg-red-100"
+                  }`}>
+                    <span className={`text-lg font-bold ${
+                      validationResult.data.score >= 70 ? "text-emerald-700" :
+                      validationResult.data.score >= 50 ? "text-amber-700" : "text-red-700"
+                    }`}>
+                      {validationResult.data.score}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Validation Score</p>
+                    <p className="text-xs text-muted-foreground">Based on revenue, forecast, and competitor presence</p>
+                  </div>
+                </div>
+                {(validationResult.data.findings || []).length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">Findings</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                      {(validationResult.data.findings || []).map((f: string, i: number) => (
+                        <li key={i}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {documents.length === 0
+                  ? "Upload proposal documents first, then run validation."
+                  : "Click Validate Proposal to run validation checks."}
+              </p>
+            )}
+          </DataCard>
+          {displayedEvaluation?.validationSummary && (
+            <DataCard title="Validation from Evaluation" description="From latest fund evaluation">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Score:</span>
+                  <span className={displayedEvaluation.validationSummary.validationScore >= 70 ? "text-emerald-600" : "text-amber-600"}>
+                    {displayedEvaluation.validationSummary.validationScore}
+                  </span>
+                </div>
+                {displayedEvaluation.validationSummary.findings && displayedEvaluation.validationSummary.findings.length > 0 && (
+                  <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                    {displayedEvaluation.validationSummary.findings.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </DataCard>
+          )}
+        </TabsContent>
+
+        {/* Evaluation Tab */}
+        <TabsContent value="evaluation" className="mt-4 space-y-6">
       {/* Proposal Validation Summary - above Proposal Evaluation */}
-      {validationResult?.ok && validationResult?.data && (
-        <Card className="mt-4">
+      {(displayedEvaluation?.validationSummary || (validationResult?.ok && validationResult?.data)) && (
+        <Card>
           <CardHeader>
-            <CardTitle className="text-base">Proposal Validation Summary</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5" />
+              Proposal Validation Summary
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <strong>Validation Score:</strong> {validationResult.data.score}
+          <CardContent className="space-y-6">
+            {/* Score + Confidence */}
+            <div className="flex items-center gap-6">
+              <div
+                className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full ${
+                  (displayedEvaluation?.validationSummary?.validationScore ?? validationResult?.data?.score ?? 0) >= 70
+                    ? "bg-emerald-100"
+                    : (displayedEvaluation?.validationSummary?.validationScore ?? validationResult?.data?.score ?? 0) >= 50
+                    ? "bg-amber-100"
+                    : "bg-red-100"
+                }`}
+              >
+                <span
+                  className={`text-2xl font-bold ${
+                    (displayedEvaluation?.validationSummary?.validationScore ?? validationResult?.data?.score ?? 0) >= 70
+                      ? "text-emerald-700"
+                      : (displayedEvaluation?.validationSummary?.validationScore ?? validationResult?.data?.score ?? 0) >= 50
+                      ? "text-amber-700"
+                      : "text-red-700"
+                  }`}
+                >
+                  {displayedEvaluation?.validationSummary?.validationScore ?? validationResult?.data?.score ?? 0}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Score</p>
+                <p className="text-xl font-bold tabular-nums">
+                  {displayedEvaluation?.validationSummary?.validationScore ?? validationResult?.data?.score ?? 0}
+                </p>
+                {displayedEvaluation?.validationSummary?.confidence && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Confidence: <span className="capitalize font-medium">{displayedEvaluation.validationSummary.confidence}</span>
+                  </p>
+                )}
+              </div>
             </div>
-            <ul className="list-disc pl-5 space-y-1">
-              {(validationResult.data.findings || []).map((f: string, i: number) => (
-                <li key={i}>{f}</li>
-              ))}
-            </ul>
+
+            {/* Grid of checks - only when we have full validation from evaluation */}
+            {displayedEvaluation?.validationSummary?.checks && Object.keys(displayedEvaluation.validationSummary.checks).length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-3">Validation Checks</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {(["revenue", "forecast", "stage", "ip", "competitors", "businessModel"] as const).map((key) => {
+                    const check = displayedEvaluation!.validationSummary!.checks![key];
+                    if (!check) return null;
+                    const isFound = check.status === "found";
+                    const isPartial = check.status === "partial";
+                    const isMissing = check.status === "missing";
+                    const StatusIcon = isFound ? CheckCircle : isPartial ? AlertTriangle : XCircle;
+                    const statusColor = isFound ? "text-emerald-600" : isPartial ? "text-amber-600" : "text-red-600";
+                    const borderColor = isFound ? "border-emerald-200 bg-emerald-50/50" : isPartial ? "border-amber-200 bg-amber-50/50" : "border-red-200 bg-red-50/50";
+                    const labels: Record<string, string> = {
+                      revenue: "Revenue",
+                      forecast: "Forecast",
+                      stage: "Stage",
+                      ip: "IP",
+                      competitors: "Competitors",
+                      businessModel: "Business Model",
+                    };
+                    return (
+                      <div key={key} className={`flex items-start gap-3 rounded-lg border p-3 ${borderColor}`}>
+                        <StatusIcon className={`h-5 w-5 shrink-0 mt-0.5 ${statusColor}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{labels[key] || key}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Key Findings */}
+            {((displayedEvaluation?.validationSummary?.findings?.length ?? 0) > 0 || (validationResult?.data?.findings?.length ?? 0) > 0) && (
+              <div>
+                <p className="text-sm font-medium mb-2">Key Findings</p>
+                <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                  {(displayedEvaluation?.validationSummary?.findings ?? validationResult?.data?.findings ?? []).map((f: string, i: number) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* AI Summary paragraph */}
+            {displayedEvaluation?.validationSummary?.summary && (
+              <div>
+                <p className="text-sm font-medium mb-2">AI Summary</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {displayedEvaluation.validationSummary.summary}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1534,7 +1878,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               size="sm"
               variant="outline"
               onClick={handleValidateProposal}
-              disabled={validating}
+              disabled={validating || isReadOnly}
               className="border-slate-300"
             >
               {validating ? (
@@ -1547,8 +1891,8 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             <Button
               size="sm"
               onClick={handleRunEvaluation}
-              disabled={evaluating}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              disabled={evaluating || isReadOnly}
+              className="bg-primary hover:bg-primary-hover"
             >
               {evaluating ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -1564,7 +1908,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                   size="sm"
                   variant="outline"
                   onClick={handleGenerateMemo}
-                  disabled={generatingMemo}
+                  disabled={generatingMemo || isReadOnly}
                   className="border-amber-300 text-amber-700 hover:bg-amber-50"
                 >
                   {generatingMemo ? (
@@ -1762,7 +2106,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                               {m.fileName}
                             </span>
                             {m.isLatest && (
-                              <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded shrink-0">
+                              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded shrink-0">
                                 Latest
                               </span>
                             )}
@@ -1779,98 +2123,6 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Proposal Validation Summary - above Fund Evaluation */}
-            {displayedEvaluation.validationSummary && (
-              <div className="p-5 border-b bg-slate-50/50">
-                <div className="flex items-center gap-2 mb-4">
-                  <ShieldCheck className="h-4 w-4 text-slate-600" />
-                  <p className="text-sm font-medium">Proposal Validation Summary</p>
-                  {displayedEvaluation.validationSummary.confidence && (
-                    <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full ${
-                      displayedEvaluation.validationSummary.confidence === "high" ? "bg-emerald-100 text-emerald-700" :
-                      displayedEvaluation.validationSummary.confidence === "medium" ? "bg-amber-100 text-amber-700" :
-                      "bg-slate-200 text-slate-700"
-                    }`}>
-                      {displayedEvaluation.validationSummary.confidence} confidence
-                    </span>
-                  )}
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 mb-4">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${
-                        displayedEvaluation.validationSummary.validationScore >= 70 ? "bg-emerald-100" :
-                        displayedEvaluation.validationSummary.validationScore >= 50 ? "bg-amber-100" : "bg-red-100"
-                      }`}
-                    >
-                      <span className={`text-lg font-bold ${
-                        displayedEvaluation.validationSummary.validationScore >= 70 ? "text-emerald-700" :
-                        displayedEvaluation.validationSummary.validationScore >= 50 ? "text-amber-700" : "text-red-700"
-                      }`}>
-                        {displayedEvaluation.validationSummary.validationScore}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Validation Score</p>
-                      <p className="text-xs text-muted-foreground">Heuristic + LLM signals (0–100)</p>
-                    </div>
-                  </div>
-                  {displayedEvaluation.validationSummary.summary && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Summary</p>
-                      <p className="text-sm text-muted-foreground">{displayedEvaluation.validationSummary.summary}</p>
-                    </div>
-                  )}
-                </div>
-                {displayedEvaluation.validationSummary.checks && Object.keys(displayedEvaluation.validationSummary.checks).length > 0 && (
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Checks</p>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {Object.entries(displayedEvaluation.validationSummary.checks).map(([key, check]) => (
-                        <div key={key} className="flex items-start gap-2 text-sm">
-                          <span className={`shrink-0 w-2 h-2 mt-1.5 rounded-full ${
-                            check.status === "found" ? "bg-emerald-500" :
-                            check.status === "partial" ? "bg-amber-500" : "bg-red-500"
-                          }`} />
-                          <div>
-                            <p className="font-medium capitalize">{key}</p>
-                            <p className="text-xs text-muted-foreground">{check.detail}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {displayedEvaluation.validationSummary.findings && displayedEvaluation.validationSummary.findings.length > 0 && (
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs font-medium text-amber-700 mb-1">Key findings</p>
-                    <ul className="text-sm text-muted-foreground space-y-0.5">
-                      {displayedEvaluation.validationSummary.findings.map((f, i) => (
-                        <li key={i}>• {f}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {displayedEvaluation.validationSummary.heuristic?.penalties && displayedEvaluation.validationSummary.heuristic.penalties.length > 0 && !displayedEvaluation.validationSummary.findings?.length && (
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs font-medium text-amber-700 mb-1">Penalties applied</p>
-                    <ul className="text-xs text-muted-foreground space-y-0.5">
-                      {displayedEvaluation.validationSummary.heuristic.penalties.map((p, i) => (
-                        <li key={i}>• {p}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {displayedEvaluation.validationSummary.warnings && displayedEvaluation.validationSummary.warnings.length > 0 && (
-                  <div className="mt-2">
-                    {displayedEvaluation.validationSummary.warnings.map((w, i) => (
-                      <p key={i} className="text-xs text-amber-600">{w}</p>
-                    ))}
                   </div>
                 )}
               </div>
@@ -1920,7 +2172,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                       Azure OpenAI: {displayedEvaluation.model}
                     </span>
                   ) : displayedEvaluation.engineType === "llm" ? (
-                    <span className="inline-block px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded">
+                    <span className="inline-block px-2 py-0.5 text-xs bg-primary/10 text-primary rounded">
                       LLM: {displayedEvaluation.model}
                     </span>
                   ) : (
@@ -1936,7 +2188,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             {displayedEvaluation.structuredScores && (
               <div className="p-5 border-b bg-muted/10">
                 <div className="flex items-center gap-2 mb-4">
-                  <Target className="h-4 w-4 text-indigo-600" />
+                  <Target className="h-4 w-4 text-primary" />
                   <p className="text-sm font-medium">Score Breakdown</p>
                   {displayedEvaluation.scoringMethod && (
                     <span className={`text-xs px-2 py-0.5 rounded ${
@@ -1955,7 +2207,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all"
+                          className="h-full bg-primary rounded-full transition-all"
                           style={{ width: `${(displayedEvaluation.structuredScores.sectorFit / 25) * 100}%` }}
                         />
                       </div>
@@ -1971,7 +2223,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all"
+                          className="h-full bg-primary rounded-full transition-all"
                           style={{ width: `${(displayedEvaluation.structuredScores.geographyFit / 20) * 100}%` }}
                         />
                       </div>
@@ -1987,7 +2239,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all"
+                          className="h-full bg-primary rounded-full transition-all"
                           style={{ width: `${(displayedEvaluation.structuredScores.stageFit / 15) * 100}%` }}
                         />
                       </div>
@@ -2003,7 +2255,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all"
+                          className="h-full bg-primary rounded-full transition-all"
                           style={{ width: `${(displayedEvaluation.structuredScores.ticketSizeFit / 15) * 100}%` }}
                         />
                       </div>
@@ -2040,16 +2292,85 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               </div>
             )}
 
-            {/* Summaries */}
+            {/* Summaries - inline editable */}
             <div className="grid md:grid-cols-2 gap-4 p-5 border-b">
               <div>
                 <p className="text-sm font-medium mb-2">Mandate Summary</p>
                 <p className="text-sm text-muted-foreground">{displayedEvaluation.mandateSummary}</p>
               </div>
               <div>
-                <p className="text-sm font-medium mb-2">Proposal Summary</p>
-                <p className="text-sm text-muted-foreground">{displayedEvaluation.proposalSummary}</p>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-sm font-medium">Proposal Summary</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => {
+                      setEditingSummary(true);
+                      setAnalystSummary(displayedEvaluation.proposalSummary || "");
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+                {editingSummary ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={analystSummary}
+                      onChange={(e) => setAnalystSummary(e.target.value)}
+                      className="min-h-[100px] text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => setEditingSummary(false)}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" onClick={() => setEditingSummary(false)}>
+                        <Save className="h-3.5 w-3.5 mr-1" />
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{displayedSummary}</p>
+                )}
               </div>
+            </div>
+            {/* Analyst Notes - inline editable */}
+            <div className="p-5 border-b">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="text-sm font-medium">Analyst Notes</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setEditingNotes(true)}
+                >
+                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  {analystNotes ? "Edit" : "Add"}
+                </Button>
+              </div>
+              {editingNotes ? (
+                <div className="space-y-2">
+                  <Textarea
+                    value={analystNotes}
+                    onChange={(e) => setAnalystNotes(e.target.value)}
+                    placeholder="Add your notes..."
+                    className="min-h-[80px] text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditingNotes(false)}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={() => setEditingNotes(false)}>
+                      <Save className="h-3.5 w-3.5 mr-1" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{analystNotes || "No notes yet."}</p>
+              )}
             </div>
 
             {/* Strengths, Risks, Recommendations */}
@@ -2072,9 +2393,20 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
               {/* Risks */}
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <p className="text-sm font-medium">Risks</p>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <p className="text-sm font-medium">Risks</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setExplainAiOpen(true)}
+                  >
+                    <HelpCircle className="h-3.5 w-3.5 mr-1" />
+                    Explain AI
+                  </Button>
                 </div>
                 <ul className="space-y-2">
                   {displayedEvaluation.risks.map((risk, i) => (
@@ -2131,7 +2463,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     {evaluations.slice(0, 5).map((eval_, i) => (
                       <TableRow 
                         key={eval_.blobPath} 
-                        className={`group ${displayedEvaluation?.evaluationId === eval_.evaluationId ? "bg-indigo-50" : ""}`}
+                        className={`group ${displayedEvaluation?.evaluationId === eval_.evaluationId ? "bg-primary/5" : ""}`}
                       >
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -2140,7 +2472,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                             )}
                             <span className="font-mono text-sm">{eval_.evaluationId}</span>
                             {i === 0 && (
-                              <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                                 Latest
                               </span>
                             )}
@@ -2222,7 +2554,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                         <div className="flex items-center gap-2 flex-wrap">
                           <Link
                             href={`/dashboard/proposals/${deal.proposalId}`}
-                            className="font-mono text-sm font-medium text-indigo-600 hover:underline"
+                            className="font-mono text-sm font-medium text-primary hover:underline"
                           >
                             {deal.proposalId}
                           </Link>
@@ -2266,6 +2598,253 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           </div>
         )}
       </DataCard>
+        </TabsContent>
+
+        {/* AI Memo Tab */}
+        <TabsContent value="memo" className="space-y-6 mt-4">
+          {memoMessage && (
+            <div className={`px-4 py-3 rounded-lg text-sm ${
+              memoMessage.type === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
+            }`}>
+              {memoMessage.text}
+            </div>
+          )}
+
+          {displayedEvaluation ? (
+            <>
+              {/* Premium AI Memo Document */}
+              <Card className="overflow-hidden">
+                {/* Memo Header */}
+                <div className="border-b bg-muted/20 px-6 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold tracking-tight">Investment Committee Memo</h2>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {proposal?.name} · {proposal?.applicant}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={displayedEvaluation.confidence === "high" ? "success" : displayedEvaluation.confidence === "medium" ? "warning" : "secondary"}
+                        className="capitalize"
+                      >
+                        {displayedEvaluation.confidence} Confidence
+                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={handleGenerateMemo} disabled={generatingMemo}>
+                          {generatingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileOutput className="h-4 w-4" />}
+                        </Button>
+                        {latestMemoBlobPath && (
+                          <Button size="sm" variant="outline" onClick={() => handleDownloadMemo()}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Memo Body - Document Style */}
+                <div className="px-6 py-6 space-y-8 max-w-3xl">
+                  {/* 1. Executive Summary */}
+                  <MemoSection
+                    title="Executive Summary"
+                    icon={Sparkles}
+                    content={displayedEvaluation.proposalSummary}
+                    explainKey="exec-summary"
+                    explainContent="This summary is generated by the AI from the proposal documents and mandate alignment. It captures the core opportunity and fit."
+                    expanded={memoExpanded}
+                    onToggle={(key) => setMemoExpanded((p) => ({ ...p, [key]: !p[key] }))}
+                  />
+
+                  {/* 2. Investment Highlights */}
+                  <MemoSection
+                    title="Investment Highlights"
+                    icon={TrendingUp}
+                    content={
+                      (displayedEvaluation.strengths?.length ?? 0) > 0 ? (
+                      <ul className="space-y-2">
+                        {(displayedEvaluation.strengths ?? []).map((s, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      ) : (
+                        <p className="text-muted-foreground italic">No highlights identified.</p>
+                      )
+                    }
+                    explainKey="highlights"
+                    explainContent="These highlights are derived from the AI's analysis of mandate alignment, sector fit, and proposal strengths."
+                    expanded={memoExpanded}
+                    onToggle={(key) => setMemoExpanded((p) => ({ ...p, [key]: !p[key] }))}
+                  />
+
+                  {/* 3. Key Risks (with source references) */}
+                  <MemoSection
+                    title="Key Risks"
+                    icon={AlertTriangle}
+                    content={
+                      (displayedEvaluation.risks?.length ?? 0) > 0 ? (
+                      <ul className="space-y-3">
+                        {(displayedEvaluation.risks ?? []).map((risk, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                            <div>
+                              <span>{risk}</span>
+                              <p className="text-xs text-muted-foreground mt-1 italic">Source: AI evaluation · Proposal analysis</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      ) : (
+                        <p className="text-muted-foreground italic">No risks identified.</p>
+                      )
+                    }
+                    explainKey="risks"
+                    explainContent="Risks are identified through mandate comparison, sector analysis, and qualitative assessment of the proposal materials."
+                    expanded={memoExpanded}
+                    onToggle={(key) => setMemoExpanded((p) => ({ ...p, [key]: !p[key] }))}
+                  />
+
+                  {/* 4. Financial Overview */}
+                  <MemoSection
+                    title="Financial Overview"
+                    icon={DollarSign}
+                    content={
+                      <div className="space-y-3">
+                        <div className="flex justify-between py-2 border-b">
+                          <span className="text-muted-foreground">Requested Amount</span>
+                          <span className="font-medium">{proposal ? formatAmount(proposal.amount) : "—"}</span>
+                        </div>
+                        {displayedEvaluation.structuredScores && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <div className="flex justify-between text-sm py-1">
+                              <span className="text-muted-foreground">Sector Fit</span>
+                              <span>{displayedEvaluation.structuredScores.sectorFit}/25</span>
+                            </div>
+                            <div className="flex justify-between text-sm py-1">
+                              <span className="text-muted-foreground">Ticket Size Fit</span>
+                              <span>{displayedEvaluation.structuredScores.ticketSizeFit}/15</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    }
+                    explainKey="financial"
+                    explainContent="Financial metrics are extracted from proposal documents. Score breakdown reflects mandate alignment."
+                    expanded={memoExpanded}
+                    onToggle={(key) => setMemoExpanded((p) => ({ ...p, [key]: !p[key] }))}
+                  />
+
+                  {/* 5. Recommendation */}
+                  <MemoSection
+                    title="Recommendation"
+                    icon={Target}
+                    content={
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                            (displayedEvaluation.fitScore ?? 0) >= 70 ? "bg-emerald-100" :
+                            (displayedEvaluation.fitScore ?? 0) >= 50 ? "bg-amber-100" : "bg-red-100"
+                          }`}>
+                            <span className={`text-lg font-bold ${
+                              (displayedEvaluation.fitScore ?? 0) >= 70 ? "text-emerald-700" :
+                              (displayedEvaluation.fitScore ?? 0) >= 50 ? "text-amber-700" : "text-red-700"
+                            }`}>
+                              {displayedEvaluation.fitScore ?? "—"}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {(displayedEvaluation.fitScore ?? 0) >= 70 ? "Proceed" :
+                               (displayedEvaluation.fitScore ?? 0) >= 50 ? "Proceed with conditions" : "Defer or decline"}
+                            </p>
+                            <p className="text-sm text-muted-foreground">Fit Score: {displayedEvaluation.fitScore ?? "—"}/100</p>
+                          </div>
+                        </div>
+                        <ul className="space-y-2 mt-3">
+                          {(displayedEvaluation.recommendations ?? []).slice(0, 3).map((r, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm">
+                              <Lightbulb className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                              <span>{r}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    }
+                    explainKey="recommendation"
+                    explainContent="The recommendation is based on fit score, mandate alignment, and identified strengths and risks."
+                    expanded={memoExpanded}
+                    onToggle={(key) => setMemoExpanded((p) => ({ ...p, [key]: !p[key] }))}
+                  />
+                </div>
+              </Card>
+
+              {/* Report History */}
+              {memos.length > 0 && (
+                <DataCard title="Report History" description="Generated PDF reports">
+                  <div className="space-y-1.5">
+                    {memos.map((m) => (
+                      <div key={m.blobPath} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/30">
+                        <span className="text-sm truncate">{m.fileName}</span>
+                        <Button variant="ghost" size="sm" onClick={() => handleDownloadMemo(m.blobPath)}>
+                          <Download className="h-3.5 w-3.5 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </DataCard>
+              )}
+            </>
+          ) : (
+            <DataCard
+              title="AI Memo"
+              description="Run an evaluation to generate the investment memo"
+              actions={
+                <Button size="sm" disabled>
+                  <FileOutput className="h-4 w-4 mr-1" />
+                  Generate Report
+                </Button>
+              }
+            >
+              <div className="py-12 text-center">
+                <FileOutput className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-sm font-medium">No evaluation yet</p>
+                <p className="text-sm text-muted-foreground mt-1">Run a fund evaluation first to generate the AI memo.</p>
+              </div>
+            </DataCard>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Explain AI Dialog */}
+      <Dialog open={explainAiOpen} onOpenChange={setExplainAiOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5" />
+              Why AI Flagged These Risks
+            </DialogTitle>
+            <DialogDescription>
+              The AI evaluates proposals against the fund mandate and identifies potential concerns based on sector fit, geography, stage, ticket size, and qualitative analysis.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {displayedEvaluation?.risks?.map((risk, i) => (
+              <div key={i} className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-sm font-medium mb-1">Risk {i + 1}</p>
+                <p className="text-sm text-muted-foreground">{risk}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  This risk was identified based on the proposal content and mandate criteria. Review the full evaluation for detailed context.
+                </p>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -25,7 +25,7 @@ import {
 import { LucideIcon } from "lucide-react";
 
 interface ReportsClientProps {
-  role?: "saas_admin" | "tenant_admin" | "assessor";
+  role?: string;
   productionMode?: boolean;
 }
 
@@ -33,7 +33,7 @@ export default function ReportsClient({ role, productionMode }: ReportsClientPro
   if (role === "saas_admin") {
     return <SaaSAdminReports productionMode={productionMode} />;
   }
-  if (role === "tenant_admin") {
+  if (role === "tenant_admin" || role === "fund_manager" || role === "viewer") {
     return <TenantReports productionMode={productionMode} />;
   }
   return <AssessorReports productionMode={productionMode} />;

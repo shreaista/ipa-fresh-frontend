@@ -53,6 +53,7 @@ const statusVariants: Record<ProposalStatus, "muted" | "info" | "warning" | "suc
   "In Review": "warning",
   Approved: "success",
   Declined: "error",
+  Deferred: "muted",
 };
 
 export default function QueueClient({ proposals }: QueueClientProps) {

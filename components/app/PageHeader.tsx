@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
       <div className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         {subtitle && (
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
+          <p className="text-sm text-muted-foreground font-normal">{subtitle}</p>
         )}
       </div>
       {actions && (

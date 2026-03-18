@@ -4,7 +4,7 @@ import "server-only";
 // Core Role & Permission Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type Role = "saas_admin" | "tenant_admin" | "assessor";
+export type Role = "saas_admin" | "tenant_admin" | "fund_manager" | "assessor" | "viewer";
 
 export type Permission =
   // Tenant management (SaaS Admin only)
@@ -111,6 +111,25 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "reports:read:own",
     "queue:read",
     "queue:update",
+  ],
+  fund_manager: [
+    "proposals:read",
+    "proposals:create",
+    "proposals:update",
+    "proposals:assign",
+    "assessments:read",
+    "assessments:approve",
+    "reports:read",
+    "reports:create",
+    "reports:download",
+    "costs:read:tenant",
+    "queue:read",
+    "queue:update",
+  ],
+  viewer: [
+    "proposals:read",
+    "reports:read",
+    "reports:download",
   ],
 };
 

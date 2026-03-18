@@ -6,6 +6,7 @@ import type { NavItem } from "@/lib/nav";
 import { getPageTitle } from "@/lib/nav";
 import { Topbar, type UserInfo } from "./Topbar";
 import { Sidebar, MobileSidebar } from "./Sidebar";
+import { RoleProvider } from "./RoleContext";
 
 interface AppShellProps {
   user: UserInfo;
@@ -21,9 +22,11 @@ export function AppShell({ user, navItems, permissions, activeTenantId, children
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const pageTitle = getPageTitle(pathname, navItems);
+  const isReadOnly = user.isReadOnly ?? false;
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <RoleProvider role={user.role} isReadOnly={isReadOnly}>
+    <div className="min-h-screen bg-background">
       <Topbar
         user={user}
         pageTitle={pageTitle}
@@ -49,11 +52,12 @@ export function AppShell({ user, navItems, permissions, activeTenantId, children
         />
 
         <main className="flex-1 min-h-[calc(100vh-3.5rem)]">
-          <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
             {children}
           </div>
         </main>
       </div>
     </div>
+    </RoleProvider>
   );
 }

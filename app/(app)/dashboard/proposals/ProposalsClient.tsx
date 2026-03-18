@@ -72,6 +72,7 @@ const statusVariants: Record<ProposalStatus, "muted" | "info" | "warning" | "suc
   "In Review": "warning",
   Approved: "success",
   Declined: "error",
+  Deferred: "muted",
 };
 
 const statusIcons: Record<ProposalStatus, LucideIcon> = {
@@ -80,6 +81,7 @@ const statusIcons: Record<ProposalStatus, LucideIcon> = {
   "In Review": Clock,
   Approved: CheckCircle,
   Declined: XCircle,
+  Deferred: Clock,
 };
 
 function formatAmount(amount: number): string {
@@ -185,7 +187,8 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
   const [submittingAssignment, setSubmittingAssignment] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
-  const canAssign = role === "tenant_admin" || role === "saas_admin";
+  const canAssign = ["tenant_admin", "saas_admin", "fund_manager"].includes(role ?? "");
+  const isReadOnly = role === "viewer";
 
   const loadAssignmentData = useCallback(async () => {
     setLoadingData(true);
@@ -288,8 +291,10 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
   }
 
   const roleLabel = role === "saas_admin" ? "SaaS Admin" :
-                    role === "tenant_admin" ? "Tenant Admin" :
-                    role === "assessor" ? "Assessor" : role;
+                    role === "tenant_admin" ? "Admin" :
+                    role === "fund_manager" ? "Fund Manager" :
+                    role === "assessor" ? "Analyst" :
+                    role === "viewer" ? "Viewer" : role;
 
   return (
     <div className="space-y-6">
@@ -304,12 +309,14 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
         subtitle="View and manage all funding proposals"
         actions={
           <div className="flex items-center gap-2">
-            <Link href="/dashboard/proposals/new">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Proposal
-              </Button>
-            </Link>
+            {!isReadOnly && (
+              <Link href="/dashboard/proposals/new">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Proposal
+                </Button>
+              </Link>
+            )}
             <Button variant="outline" size="sm">
               <Download className="h-4 w-4 mr-2" />
               Export

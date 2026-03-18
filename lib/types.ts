@@ -1,4 +1,4 @@
-export type Role = "saas_admin" | "tenant_admin" | "assessor";
+export type Role = "saas_admin" | "tenant_admin" | "fund_manager" | "assessor" | "viewer";
 
 export interface SessionPayload {
   userId: string;

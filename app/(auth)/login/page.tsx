@@ -128,7 +128,7 @@ export default function LoginPage() {
             </div>
 
             {/* Login Card */}
-            <Card className="border shadow-xl shadow-black/5">
+            <Card className="border-border/80">
               <CardContent className="p-6 sm:p-8">
                 <div className="mb-6">
                   <h2 className="text-xl font-semibold tracking-tight">

@@ -21,6 +21,9 @@ import {
   PanelLeft,
   X,
   ListChecks,
+  Target,
+  MessageSquare,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +40,9 @@ const iconMap: Record<IconKey, LucideIcon> = {
   "settings": Settings,
   "scroll-text": ScrollText,
   "list-checks": ListChecks,
+  "target": Target,
+  "message-square": MessageSquare,
+  "history": History,
 };
 
 function filterItemsByPermissionAndRole(
@@ -74,7 +80,7 @@ export function Sidebar({ items, permissions, role, collapsed, onToggle }: Sideb
   return (
     <aside
       className={cn(
-        "hidden lg:flex flex-col h-[calc(100vh-3.5rem)] sticky top-14 border-r bg-background/50 transition-all duration-200 ease-out",
+        "hidden lg:flex flex-col h-[calc(100vh-3.5rem)] sticky top-14 border-r border-border/60 bg-card transition-all duration-200 ease-out",
         collapsed ? "w-[68px]" : "w-[240px]"
       )}
     >

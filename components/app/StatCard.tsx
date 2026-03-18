@@ -24,14 +24,14 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "group relative rounded-xl border bg-card p-5 transition-all duration-200",
-        "hover:border-border/80 hover:shadow-sm",
+        "group relative rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-[var(--shadow-card)] transition-all duration-200",
+        "hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5",
         className
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1.5 min-w-0 flex-1">
-          <p className="text-[13px] font-medium text-muted-foreground truncate">
+          <p className="text-[13px] font-medium text-muted-foreground truncate font-normal">
             {title}
           </p>
           <p className="text-2xl font-semibold tracking-tight tabular-nums">

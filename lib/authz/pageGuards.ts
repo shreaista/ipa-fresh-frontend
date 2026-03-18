@@ -52,7 +52,7 @@ export async function requireAuth(): Promise<AuthenticatedUser> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function requireRole(
-  allowedRoles: Array<"saas_admin" | "tenant_admin" | "assessor">
+  allowedRoles: Array<"saas_admin" | "tenant_admin" | "fund_manager" | "assessor" | "viewer">
 ): Promise<AuthenticatedUser> {
   const user = await requireAuth();
 
@@ -89,7 +89,7 @@ export async function requireTenantContext(): Promise<TenantContext> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function requireRoleWithTenantContext(
-  allowedRoles: Array<"saas_admin" | "tenant_admin" | "assessor">
+  allowedRoles: Array<"saas_admin" | "tenant_admin" | "fund_manager" | "assessor" | "viewer">
 ): Promise<TenantContext> {
   const user = await requireRole(allowedRoles);
 
@@ -129,7 +129,7 @@ export async function requirePermission(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function requireRoleOrPermission(
-  allowedRoles: Array<"saas_admin" | "tenant_admin" | "assessor">,
+  allowedRoles: Array<"saas_admin" | "tenant_admin" | "fund_manager" | "assessor" | "viewer">,
   permission: Permission
 ): Promise<AuthenticatedUser> {
   const user = await requireAuth();

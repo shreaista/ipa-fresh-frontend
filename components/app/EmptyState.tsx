@@ -28,7 +28,7 @@ export function EmptyState({
         className
       )}
     >
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted/50 mb-4">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50 mb-4">
         <Icon className="h-6 w-6 text-muted-foreground" />
       </div>
       <h3 className="text-sm font-semibold mb-1">{title}</h3>

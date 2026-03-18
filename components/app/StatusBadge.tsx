@@ -23,7 +23,7 @@ const variantStyles: Record<StatusVariant, string> = {
   warning:
     "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
   error: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400",
-  info: "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400",
+  info: "bg-primary/10 text-primary dark:bg-primary/20",
   default:
     "bg-primary/10 text-primary dark:bg-primary/20",
   muted:
@@ -34,7 +34,7 @@ const dotStyles: Record<StatusVariant, string> = {
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   error: "bg-red-500",
-  info: "bg-blue-500",
+  info: "bg-primary",
   default: "bg-primary",
   muted: "bg-muted-foreground",
 };
@@ -49,7 +49,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium",
+        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-medium",
         variantStyles[variant],
         className
       )}

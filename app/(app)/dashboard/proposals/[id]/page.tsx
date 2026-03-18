@@ -19,18 +19,20 @@ export default async function ProposalDetailPage({ params }: PageProps) {
   });
 
   if (result.accessDenied) {
-    return <ProposalDetailClient proposal={null} canAssign={false} error="Not authorized to view this proposal" />;
+    return <ProposalDetailClient proposal={null} canAssign={false} isReadOnly={false} error="Not authorized to view this proposal" />;
   }
 
   if (!result.proposal) {
-    return <ProposalDetailClient proposal={null} canAssign={false} error="Proposal not found" />;
+    return <ProposalDetailClient proposal={null} canAssign={false} isReadOnly={false} error="Proposal not found" />;
   }
 
-  // Check if user can assign (tenant_admin or saas_admin)
-  const canAssign = user.role === "tenant_admin" || user.role === "saas_admin";
+  // Check if user can assign (tenant_admin, saas_admin, or fund_manager) - not viewer
+  const canAssign = ["tenant_admin", "saas_admin", "fund_manager"].includes(user.role);
 
-  // Check if user can manage documents (upload/delete) - tenant_admin, saas_admin, or assessor
-  const canManageDocuments = user.role === "tenant_admin" || user.role === "saas_admin" || user.role === "assessor";
+  // Check if user can manage documents (upload/delete) - not viewer
+  const canManageDocuments = !["viewer"].includes(user.role) && ["tenant_admin", "saas_admin", "assessor", "fund_manager"].includes(user.role);
+
+  const isReadOnly = user.role === "viewer";
 
   // Get current queue assignment if any
   const queueId = getProposalQueueId(result.proposal.id);
@@ -47,6 +49,7 @@ export default async function ProposalDetailPage({ params }: PageProps) {
       proposal={result.proposal}
       canAssign={canAssign}
       canManageDocuments={canManageDocuments}
+      isReadOnly={isReadOnly}
       currentAssignment={currentAssignment}
     />
   );

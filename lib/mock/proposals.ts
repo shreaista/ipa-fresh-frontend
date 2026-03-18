@@ -18,7 +18,7 @@ import { getFundById } from "./fundsStore";
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ProposalStatus = "New" | "Assigned" | "In Review" | "Approved" | "Declined";
+export type ProposalStatus = "New" | "Assigned" | "In Review" | "Approved" | "Declined" | "Deferred";
 
 export type AssignmentType = "direct" | "queue" | "none";
 
@@ -347,7 +347,7 @@ export function listProposalsForUser(params: ListProposalsParams): Proposal[] {
   let tenantProposals = proposals.filter((p) => p.tenantId === tenantId);
   tenantProposals = filterProposalsForProduction(tenantProposals);
 
-  if (role === "saas_admin" || role === "tenant_admin") {
+  if (role === "saas_admin" || role === "tenant_admin" || role === "fund_manager" || role === "viewer") {
     return tenantProposals;
   }
 
@@ -371,7 +371,13 @@ export function listProposalsWithAssignmentForUser(params: ListProposalsParams):
   let tenantProposals = proposals.filter((p) => p.tenantId === tenantId);
   tenantProposals = filterProposalsForProduction(tenantProposals);
 
-  if (role !== "saas_admin" && role !== "tenant_admin") {
+  if (role === "assessor") {
+    const userQueueIds = getQueueIdsForUser(tenantId, params.userId);
+    const proposalIdsInQueues = getProposalIdsInQueues(userQueueIds);
+    tenantProposals = tenantProposals.filter(
+      (p) => p.assignedToUserId === params.userId || proposalIdsInQueues.includes(p.id)
+    );
+  } else if (!["saas_admin", "tenant_admin", "fund_manager", "viewer"].includes(role)) {
     return [];
   }
 
@@ -425,7 +431,7 @@ export function getProposalForUser(params: GetProposalParams): GetProposalResult
     return { proposal: null, accessDenied: true };
   }
 
-  if (role === "saas_admin" || role === "tenant_admin") {
+  if (["saas_admin", "tenant_admin", "fund_manager", "viewer"].includes(role)) {
     return { proposal, accessDenied: false };
   }
 
@@ -568,4 +574,36 @@ export function assignProposal(params: AssignProposalParams): AssignProposalResu
 export function getProposalById(proposalId: string): Proposal | undefined {
   initProposalsFromFile();
   return proposals.find((p) => p.id === proposalId);
+}
+
+export interface UpdateProposalStatusParams {
+  proposalId: string;
+  tenantId: string;
+  userId: string;
+  role: string;
+  status: ProposalStatus;
+}
+
+export interface UpdateProposalStatusResult {
+  ok: boolean;
+  error?: string;
+}
+
+export function updateProposalStatus(params: UpdateProposalStatusParams): UpdateProposalStatusResult {
+  initProposalsFromFile();
+  const { proposalId, tenantId, role, status } = params;
+  const validStatuses: ProposalStatus[] = ["New", "Assigned", "In Review", "Approved", "Declined", "Deferred"];
+  if (!validStatuses.includes(status)) {
+    return { ok: false, error: "Invalid status" };
+  }
+  const proposal = proposals.find((p) => p.id === proposalId && p.tenantId === tenantId);
+  if (!proposal) {
+    return { ok: false, error: "Proposal not found" };
+  }
+  if (role !== "tenant_admin" && role !== "saas_admin") {
+    return { ok: false, error: "Insufficient permissions" };
+  }
+  proposal.status = status;
+  persistProposals();
+  return { ok: true };
 }

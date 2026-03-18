@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 interface CostsClientProps {
-  role?: "saas_admin" | "tenant_admin" | "assessor";
+  role?: string;
 }
 
 export default function CostsClient({ role }: CostsClientProps) {

@@ -37,7 +37,7 @@ export async function requireActiveTenantId(): Promise<string> {
     return tenantId;
   }
 
-  if (user.role === "tenant_admin" || user.role === "assessor") {
+  if (["tenant_admin", "fund_manager", "assessor", "viewer"].includes(user.role)) {
     const tenantId = await getActiveTenantId();
     if (!tenantId) {
       throw new TenantContextError(
@@ -64,7 +64,7 @@ export async function getEffectiveTenantId(): Promise<string | null> {
     return cookieTenantId;
   }
 
-  if (user.role === "tenant_admin" || user.role === "assessor") {
+  if (["tenant_admin", "fund_manager", "assessor", "viewer"].includes(user.role)) {
     return cookieTenantId;
   }
 
@@ -72,5 +72,5 @@ export async function getEffectiveTenantId(): Promise<string | null> {
 }
 
 export function isTenantRequired(role: string): boolean {
-  return role === "tenant_admin" || role === "assessor";
+  return ["tenant_admin", "fund_manager", "assessor", "viewer"].includes(role);
 }
