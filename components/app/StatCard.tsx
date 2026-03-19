@@ -12,6 +12,8 @@ interface StatCardProps {
   iconTint?: "amber" | "blue" | "emerald" | "violet";
   /** Optional className for the value (metric number) */
   valueClassName?: string;
+  /** Optional className for the icon wrapper (overrides iconTint when set) */
+  iconClassName?: string;
 }
 
 const iconTintStyles: Record<NonNullable<StatCardProps["iconTint"]>, string> = {
@@ -30,6 +32,7 @@ export function StatCard({
   className,
   iconTint,
   valueClassName,
+  iconClassName,
 }: StatCardProps) {
   const TrendIcon =
     trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
@@ -75,7 +78,7 @@ export function StatCard({
           <div
             className={cn(
               "shrink-0 rounded-xl p-3 transition-colors",
-              iconTint ? iconTintStyles[iconTint] : "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
+              iconClassName ?? (iconTint ? iconTintStyles[iconTint] : "bg-slate-100 text-slate-600 group-hover:bg-slate-200")
             )}
           >
             <Icon className="h-5 w-5" />
