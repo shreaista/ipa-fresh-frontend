@@ -10,6 +10,8 @@ interface StatCardProps {
   className?: string;
   /** Soft tinted icon circle: amber, blue, emerald, violet */
   iconTint?: "amber" | "blue" | "emerald" | "violet";
+  /** Optional className for the value (metric number) */
+  valueClassName?: string;
 }
 
 const iconTintStyles: Record<NonNullable<StatCardProps["iconTint"]>, string> = {
@@ -27,6 +29,7 @@ export function StatCard({
   trend,
   className,
   iconTint,
+  valueClassName,
 }: StatCardProps) {
   const TrendIcon =
     trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
@@ -43,7 +46,7 @@ export function StatCard({
           <p className="text-[13px] font-medium text-slate-500 truncate font-normal">
             {title}
           </p>
-          <p className="text-2xl font-semibold tracking-tight tabular-nums text-slate-900">
+          <p className={cn("text-2xl font-semibold tracking-tight tabular-nums text-slate-900", valueClassName)}>
             {value}
           </p>
           {description && (
