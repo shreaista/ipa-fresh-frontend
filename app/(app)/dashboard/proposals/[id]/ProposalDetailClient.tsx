@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { StatusBadge, DataCard, EmptyState } from "@/components/app";
+import { StatusBadge, DataCard, EmptyState, PageHero } from "@/components/app";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1005,7 +1005,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
   const StatusIcon = statusIcons[proposal.status];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center gap-4">
         <Link href="/dashboard/proposals">
           <Button variant="ghost" size="sm">
@@ -1015,79 +1015,90 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
         </Link>
       </div>
 
-      {/* Premium header: proposal name + metadata + actions */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between border-b border-gray-200 pb-6">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">{proposal.name}</h1>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+      {/* Blue/indigo hero header */}
+      <PageHero
+        variant="proposals"
+        icon={FileText}
+        title={proposal.name}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+            <span className="flex items-center gap-1.5 font-mono">
+              <Hash className="h-3.5 w-3.5 text-indigo-500" />
+              {proposal.id}
+            </span>
             <span className="flex items-center gap-1.5">
-              <Building className="h-4 w-4" />
+              <Building className="h-3.5 w-3.5 text-indigo-500" />
               {proposal.fund || "—"}
             </span>
             <span className="flex items-center gap-1.5">
-              <DollarSign className="h-4 w-4" />
+              <DollarSign className="h-3.5 w-3.5 text-indigo-500" />
               {formatAmount(proposal.amount)}
             </span>
             <span className="flex items-center gap-1.5">
-              <Target className="h-4 w-4" />
+              <Target className="h-3.5 w-3.5 text-indigo-500" />
               {proposal.stage || "—"}
             </span>
             <span className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="h-3.5 w-3.5 text-indigo-500" />
               {proposal.submittedAt}
             </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleValidateProposal}
-            disabled={validating || documents.length === 0}
-          >
-            {validating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-1.5" />}
-            Validate
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleRunEvaluation}
-            disabled={evaluating || isReadOnly}
-          >
-            {evaluating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Play className="h-4 w-4 mr-1.5" />}
-            Evaluate
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerateMemo}
-            disabled={generatingMemo || isReadOnly}
-          >
-            {generatingMemo ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileOutput className="h-4 w-4 mr-1.5" />}
-            Generate Report
-          </Button>
-          {proposal.status === "New" && (
-            <Button variant="secondary" size="sm">
-              <UserPlus className="h-4 w-4 mr-1.5" />
-              Assign Assessor
+          </span>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleValidateProposal}
+              disabled={validating || documents.length === 0}
+              className="border-indigo-200 bg-white/80 hover:bg-indigo-50"
+            >
+              {validating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-1.5" />}
+              Validate
             </Button>
-          )}
-          {proposal.status === "In Review" && (
-            <>
-              <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
-                <XCircle className="h-4 w-4 mr-1.5" />
-                Decline
+            <Button
+              size="sm"
+              onClick={handleRunEvaluation}
+              disabled={evaluating || isReadOnly}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              {evaluating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Play className="h-4 w-4 mr-1.5" />}
+              Evaluate
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateMemo}
+              disabled={generatingMemo || isReadOnly}
+              className="border-indigo-200 bg-white/80 hover:bg-indigo-50"
+            >
+              {generatingMemo ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileOutput className="h-4 w-4 mr-1.5" />}
+              Generate Report
+            </Button>
+            {proposal.status === "New" && (
+              <Button variant="secondary" size="sm">
+                <UserPlus className="h-4 w-4 mr-1.5" />
+                Assign Assessor
               </Button>
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                <CheckCircle className="h-4 w-4 mr-1.5" />
-                Approve
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+            {proposal.status === "In Review" && (
+              <>
+                <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
+                  <XCircle className="h-4 w-4 mr-1.5" />
+                  Decline
+                </Button>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                  <CheckCircle className="h-4 w-4 mr-1.5" />
+                  Approve
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      />
 
       <div className="grid gap-8 md:grid-cols-2">
-        <Card>
+        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
           <CardHeader>
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
@@ -1127,7 +1138,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           </CardContent>
         </Card>
 
-        <Card className="overflow-visible">
+        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-visible">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
@@ -1496,8 +1507,9 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
       </DataCard>
 
       {/* Analyst Workspace Tabs */}
-      <Tabs defaultValue="documents" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid rounded-xl border border-gray-200 bg-gray-50/80 p-1 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/50 to-white p-6 shadow-sm mt-2">
+        <Tabs defaultValue="documents" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid rounded-xl border border-slate-200 bg-slate-100/80 p-1.5 shadow-sm">
           <TabsTrigger value="documents" className="gap-2">
             <FileText className="h-4 w-4" />
             Documents
@@ -1717,7 +1729,8 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           <DataCard
             title="Proposal Validation Summary"
             description="Run validation to check proposal completeness"
-            className="bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border-indigo-200 shadow-[0_0_0_1px_rgba(99,102,241,0.1)]"
+            className="bg-gradient-to-br from-violet-50 via-fuchsia-50/80 to-violet-100/60 border-violet-200/80 shadow-lg shadow-violet-100/40"
+            accent="violet"
             titleClassName="bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent"
             titleBadges={
               <>
@@ -1806,10 +1819,10 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
         </TabsContent>
 
         {/* Evaluation Tab */}
-        <TabsContent value="evaluation" className="mt-6 space-y-8">
+        <TabsContent value="evaluation" className="mt-8 space-y-10">
       {/* Proposal Validation Summary - AI gradient highlight */}
       {(displayedEvaluation?.validationSummary || (validationResult?.ok && validationResult?.data)) && (
-        <Card className="bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border-indigo-200 overflow-hidden transition-all duration-300 hover:shadow-md shadow-[0_0_0_1px_rgba(99,102,241,0.1)]">
+        <Card className="bg-gradient-to-br from-violet-50 via-fuchsia-50/80 to-violet-100/60 border-violet-200/80 overflow-hidden transition-all duration-300 hover:shadow-lg shadow-lg shadow-violet-100/40">
           <CardHeader className="border-b border-gray-200">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
@@ -1931,7 +1944,8 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
       <DataCard
         title="Proposal Evaluation"
         description="AI-powered analysis of proposal against fund mandate"
-        className="bg-gradient-to-r from-indigo-50/80 to-blue-50/80 border-indigo-200 shadow-[0_0_0_1px_rgba(99,102,241,0.1)]"
+        className="bg-gradient-to-br from-indigo-50 via-blue-50/80 to-indigo-100/60 border-indigo-200/80 shadow-lg shadow-indigo-100/40"
+        accent="indigo"
         titleClassName="bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent"
         titleBadges={
           <>
@@ -2220,54 +2234,53 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               </div>
             )}
 
-            {/* Fit Score - BIG centered with colored ring */}
-            <div className="flex flex-col items-center gap-4 p-8 border-t border-gray-200">
-              <div className="flex flex-col items-center gap-2">
+            {/* Fit Score - prominent colored chip + confidence badge */}
+            <div className="flex flex-col items-center gap-6 p-10 border-t border-indigo-100 bg-gradient-to-b from-white to-indigo-50/30">
+              <div className="flex flex-col items-center gap-4">
                 {displayedEvaluation.inputs.proposalDocuments === 0 && displayedEvaluation.inputs.mandateTemplates === 0 ? (
-                  <div className="flex items-center justify-center w-32 h-32 rounded-full bg-gray-100 ring-4 ring-gray-200">
-                    <span className="text-4xl font-bold text-gray-400">—</span>
+                  <div className="flex items-center justify-center w-36 h-36 rounded-full bg-slate-100 ring-4 ring-slate-200 shadow-inner">
+                    <span className="text-5xl font-bold text-slate-400">—</span>
                   </div>
                 ) : (
-                  <div className={`flex items-center justify-center w-32 h-32 rounded-full ring-4 ${
-                    displayedEvaluation.fitScore !== null ? getScoreBg(displayedEvaluation.fitScore) : "bg-gray-100"
+                  <div className={`flex items-center justify-center w-36 h-36 rounded-full ring-[6px] shadow-xl ${
+                    displayedEvaluation.fitScore !== null ? getScoreBg(displayedEvaluation.fitScore) : "bg-slate-100"
                   } ${
-                    displayedEvaluation.fitScore !== null && displayedEvaluation.fitScore >= 70 ? "ring-emerald-200" :
-                    displayedEvaluation.fitScore !== null && displayedEvaluation.fitScore >= 50 ? "ring-amber-200" :
-                    displayedEvaluation.fitScore !== null ? "ring-red-200" : "ring-gray-200"
+                    displayedEvaluation.fitScore !== null && displayedEvaluation.fitScore >= 70 ? "ring-emerald-300 shadow-lg" :
+                    displayedEvaluation.fitScore !== null && displayedEvaluation.fitScore >= 50 ? "ring-amber-300 shadow-lg" :
+                    displayedEvaluation.fitScore !== null ? "ring-red-300 shadow-lg" : "ring-slate-200"
                   }`}>
-                    <span className={`text-5xl font-bold tabular-nums ${
-                      displayedEvaluation.fitScore !== null ? getScoreColor(displayedEvaluation.fitScore) : "text-gray-400"
+                    <span className={`text-6xl font-bold tabular-nums ${
+                      displayedEvaluation.fitScore !== null ? getScoreColor(displayedEvaluation.fitScore) : "text-slate-400"
                     }`}>
                       {displayedEvaluation.fitScore !== null ? displayedEvaluation.fitScore : "—"}
                     </span>
                   </div>
                 )}
-                <div className="flex items-center gap-2 flex-wrap justify-center">
-                  <p className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
-                    {displayedEvaluation.inputs.proposalDocuments === 0 && displayedEvaluation.inputs.mandateTemplates === 0
-                      ? "Insufficient Inputs"
-                      : "Fit Score"}
-                  </p>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-center">
+                    <p className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
+                      {displayedEvaluation.inputs.proposalDocuments === 0 && displayedEvaluation.inputs.mandateTemplates === 0
+                        ? "Insufficient Inputs"
+                        : "Fit Score"}
+                    </p>
+                    {displayedEvaluation.confidence && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold border-2 ${getConfidenceColor(displayedEvaluation.confidence)}`}>
+                        {displayedEvaluation.confidence.charAt(0).toUpperCase() + displayedEvaluation.confidence.slice(1)} Confidence
+                      </span>
+                    )}
+                  </div>
                   {displayedEvaluation.inputs.proposalDocuments > 0 && displayedEvaluation.inputs.mandateTemplates > 0 && (
                     <>
-                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 border border-indigo-200">
+                        <Sparkles className="h-3.5 w-3.5" />
                         AI Scored
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-200">
-                        <Sparkles className="h-3 w-3" />
-                        Powered by AI
-                      </span>
+                      <p className="text-sm text-muted-foreground text-center">
+                        Based on {displayedEvaluation.inputs.proposalDocuments} document(s) and {displayedEvaluation.inputs.mandateTemplates} template(s)
+                      </p>
                     </>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground text-center">
-                  Based on {displayedEvaluation.inputs.proposalDocuments} document(s) and {displayedEvaluation.inputs.mandateTemplates} template(s)
-                </p>
-                {displayedEvaluation.confidence && (
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border mt-1 ${getConfidenceColor(displayedEvaluation.confidence)}`}>
-                    {displayedEvaluation.confidence.charAt(0).toUpperCase() + displayedEvaluation.confidence.slice(1)} Confidence
-                  </span>
-                )}
               </div>
               <div className="text-center text-sm text-muted-foreground">
                 <p>Evaluated {formatDate(displayedEvaluation.evaluatedAt)}</p>
@@ -2492,26 +2505,26 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
               )}
             </div>
 
-            {/* Strengths, Risks, Recommendations - 3 cards */}
-            <div className="grid md:grid-cols-3 gap-6 p-6 border-t border-gray-200">
-              {/* Strengths card */}
-              <Card className="border-indigo-200/60 bg-gradient-to-r from-indigo-50/50 to-blue-50/50 border-emerald-200/60 transition-all duration-300 hover:shadow-md shadow-[0_0_0_1px_rgba(99,102,241,0.08)]">
-                <CardHeader className="pb-2">
+            {/* Strengths, Risks, Recommendations - 3 premium colored cards */}
+            <div className="grid md:grid-cols-3 gap-8 p-8 border-t border-indigo-100 bg-gradient-to-b from-indigo-50/20 to-transparent">
+              {/* Strengths - green tint */}
+              <Card className="border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-teal-50/60 to-emerald-100/40 shadow-md transition-all duration-300 hover:shadow-lg border-t-4 border-t-emerald-500/70">
+                <CardHeader className="pb-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
-                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 shadow-sm">
+                      <CheckCircle className="h-5 w-5 text-emerald-600" />
                     </div>
-                    <CardTitle className="text-base bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">Strengths</CardTitle>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-200">
+                    <CardTitle className="text-base text-emerald-800 font-bold">Strengths</CardTitle>
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100/80 text-emerald-700 border border-emerald-200">
                       <Sparkles className="h-3 w-3" />
-                      Powered by AI
+                      AI
                     </span>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {displayedEvaluation.strengths.map((strength, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <li key={i} className="flex items-start gap-2.5 text-sm text-emerald-900/90">
                         <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
                         <span>{strength}</span>
                       </li>
@@ -2520,24 +2533,24 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                 </CardContent>
               </Card>
 
-              {/* Risks card */}
-              <Card className="border-indigo-200/60 bg-gradient-to-r from-indigo-50/50 to-blue-50/50 border-amber-200/60 transition-all duration-300 hover:shadow-md shadow-[0_0_0_1px_rgba(99,102,241,0.08)]">
-                <CardHeader className="pb-2">
+              {/* Risks - rose/amber tint */}
+              <Card className="border-rose-200/80 bg-gradient-to-br from-rose-50 via-amber-50/60 to-rose-100/40 shadow-md transition-all duration-300 hover:shadow-lg border-t-4 border-t-rose-500/70">
+                <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
-                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 shadow-sm">
+                        <AlertTriangle className="h-5 w-5 text-amber-600" />
                       </div>
-                      <CardTitle className="text-base bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">Risks</CardTitle>
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-200">
+                      <CardTitle className="text-base text-rose-800 font-bold">Risks</CardTitle>
+                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-rose-100/80 text-rose-700 border border-rose-200">
                         <Sparkles className="h-3 w-3" />
-                        Powered by AI
+                        AI
                       </span>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs"
+                      className="h-7 text-xs text-rose-700 hover:bg-rose-100"
                       onClick={() => setExplainAiOpen(true)}
                     >
                       <HelpCircle className="h-3.5 w-3.5 mr-1" />
@@ -2546,9 +2559,9 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {displayedEvaluation.risks.map((risk, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <li key={i} className="flex items-start gap-2.5 text-sm text-rose-900/90">
                         <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                         <span>{risk}</span>
                       </li>
@@ -2557,24 +2570,24 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                 </CardContent>
               </Card>
 
-              {/* Recommendations card */}
-              <Card className="border-indigo-200/60 bg-gradient-to-r from-indigo-50/50 to-blue-50/50 border-blue-200/60 transition-all duration-300 hover:shadow-md shadow-[0_0_0_1px_rgba(99,102,241,0.08)]">
-                <CardHeader className="pb-2">
+              {/* Recommendations - blue tint */}
+              <Card className="border-blue-200/80 bg-gradient-to-br from-blue-50 via-cyan-50/60 to-blue-100/40 shadow-md transition-all duration-300 hover:shadow-lg border-t-4 border-t-blue-500/70">
+                <CardHeader className="pb-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
-                      <Lightbulb className="h-4 w-4 text-blue-600" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 shadow-sm">
+                      <Lightbulb className="h-5 w-5 text-blue-600" />
                     </div>
-                    <CardTitle className="text-base bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">Recommendations</CardTitle>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-200">
+                    <CardTitle className="text-base text-blue-800 font-bold">Recommendations</CardTitle>
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100/80 text-blue-700 border border-blue-200">
                       <Sparkles className="h-3 w-3" />
-                      Powered by AI
+                      AI
                     </span>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {displayedEvaluation.recommendations.map((rec, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <li key={i} className="flex items-start gap-2.5 text-sm text-blue-900/90">
                         <Lightbulb className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
                         <span>{rec}</span>
                       </li>
@@ -2968,6 +2981,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           )}
         </TabsContent>
       </Tabs>
+      </div>
 
       {/* Explain AI Dialog */}
       <Dialog open={explainAiOpen} onOpenChange={setExplainAiOpen}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PageHeader, StatusBadge } from "@/components/app";
+import { PageHero, StatusBadge } from "@/components/app";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -73,12 +73,13 @@ function SaaSAdminReports({ productionMode }: { productionMode?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PageHero
+        variant="reports"
         title="Reports"
         subtitle="Download and manage platform reports"
         actions={
           !productionMode && (
-            <Button>
+            <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm">
               <Calendar className="h-4 w-4 mr-2" />
               Schedule Report
             </Button>
@@ -129,12 +130,13 @@ function TenantReports({ productionMode }: { productionMode?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PageHero
+        variant="reports"
         title="Reports"
         subtitle="Download organization reports"
         actions={
           !productionMode && (
-            <Button>
+            <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm">
               <Calendar className="h-4 w-4 mr-2" />
               Schedule Report
             </Button>
@@ -174,7 +176,7 @@ function AssessorReports({ productionMode }: { productionMode?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Reports" subtitle="Your assessment reports and analytics" />
+      <PageHero variant="reports" title="My Reports" subtitle="Your assessment reports and analytics" />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {reports.map((report) => (

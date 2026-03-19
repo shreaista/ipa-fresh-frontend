@@ -8,7 +8,16 @@ interface StatCardProps {
   icon?: LucideIcon;
   trend?: "up" | "down" | "neutral";
   className?: string;
+  /** Soft tinted icon circle: amber, blue, emerald, violet */
+  iconTint?: "amber" | "blue" | "emerald" | "violet";
 }
+
+const iconTintStyles: Record<NonNullable<StatCardProps["iconTint"]>, string> = {
+  amber: "bg-amber-100 text-amber-700",
+  blue: "bg-blue-100 text-blue-700",
+  emerald: "bg-emerald-100 text-emerald-700",
+  violet: "bg-violet-100 text-violet-700",
+};
 
 export function StatCard({
   title,
@@ -17,6 +26,7 @@ export function StatCard({
   icon: Icon,
   trend,
   className,
+  iconTint,
 }: StatCardProps) {
   const TrendIcon =
     trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
@@ -24,17 +34,16 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-[var(--shadow-card)] transition-all duration-200",
-        "hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5",
+        "group relative rounded-2xl border border-slate-200 bg-card p-5 sm:p-6 shadow-sm transition-all duration-200 hover:shadow-md",
         className
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1.5 min-w-0 flex-1">
-          <p className="text-[13px] font-medium text-muted-foreground truncate font-normal">
+          <p className="text-[13px] font-medium text-slate-500 truncate font-normal">
             {title}
           </p>
-          <p className="text-2xl font-semibold tracking-tight tabular-nums">
+          <p className="text-2xl font-semibold tracking-tight tabular-nums text-slate-900">
             {value}
           </p>
           {description && (
@@ -62,11 +71,11 @@ export function StatCard({
         {Icon && (
           <div
             className={cn(
-              "shrink-0 rounded-lg p-2.5 transition-colors",
-              "bg-muted/50 group-hover:bg-primary/10"
+              "shrink-0 rounded-xl p-3 transition-colors",
+              iconTint ? iconTintStyles[iconTint] : "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
             )}
           >
-            <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <Icon className="h-5 w-5" />
           </div>
         )}
       </div>

@@ -3,7 +3,7 @@
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageHeader, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
+import { PageHero, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -281,7 +281,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
   if (error) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Proposals" subtitle="View and manage all funding proposals" />
+        <PageHero variant="proposals" title="Proposals" subtitle="View and manage all funding proposals" />
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
@@ -304,14 +304,15 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
         </div>
       )}
 
-      <PageHeader
+      <PageHero
+        variant="proposals"
         title="Proposals"
         subtitle="View and manage all funding proposals"
         actions={
           <div className="flex items-center gap-2">
             {!isReadOnly && (
               <Link href="/dashboard/proposals/new">
-                <Button>
+                <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-sm">
                   <Plus className="h-4 w-4 mr-2" />
                   New Proposal
                 </Button>
@@ -342,7 +343,7 @@ export default function ProposalsClient({ proposals, error, role, proposalCount 
         }
       />
 
-      <p className="text-sm text-muted-foreground -mt-4">
+      <p className="text-sm text-slate-500 -mt-4">
         Proposals are incoming opportunities or applications that are evaluated against a selected fund.
       </p>
 

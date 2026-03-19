@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
-import { PageHeader, StatCard, DataCard, StatusBadge, EmptyState } from "@/components/app";
+import { PageHero, StatCard, DataCard, StatusBadge } from "@/components/app";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import type { FundMandateTemplate, FundMandateStatus } from "@/lib/mock/fundMandates";
 import type { Fund } from "@/lib/mock/fundsStore";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 type StatusKey = "active" | "inactive";
@@ -484,10 +485,11 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
 
   return (
     <div className="space-y-6">
-      <div>
-        <PageHeader
-          title="Funds"
-          subtitle="Manage funding sources and allocations"
+      <PageHero
+        variant="funds"
+        icon={Wallet}
+        title="Funds"
+        subtitle="Manage funding sources and allocations"
         actions={
           activeTab === "funds" ? (
             <Dialog
@@ -498,7 +500,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
               }}
             >
               <DialogTrigger asChild>
-                <Button>
+                <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm border-0">
                   <Plus className="h-4 w-4 mr-2" />
                   Create Fund
                 </Button>
@@ -556,7 +558,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
                   <Button variant="outline" onClick={() => setIsCreateFundOpen(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleCreateFund} disabled={isSubmitting || !newFund.name.trim()}>
+                  <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white" onClick={handleCreateFund} disabled={isSubmitting || !newFund.name.trim()}>
                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Create Fund
                   </Button>
@@ -566,7 +568,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           ) : fundMandatesEnabled ? (
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm border-0">
                   <Plus className="h-4 w-4 mr-2" />
                   New Template
                 </Button>
@@ -652,18 +654,23 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           ) : null
         }
       />
-      <p className="text-sm text-muted-foreground -mt-2">
+      <p className="text-sm text-slate-500 -mt-2">
         Funds represent investment programs or funding vehicles. Mandate files define the investment criteria used to evaluate proposals.
       </p>
-      </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="funds">
+        <TabsList className="rounded-xl border border-amber-200/60 bg-amber-50/30 p-1.5 shadow-sm">
+          <TabsTrigger
+            value="funds"
+            className="rounded-lg data-[state=active]:bg-amber-100 data-[state=active]:text-amber-900 data-[state=active]:shadow-sm"
+          >
             <Wallet className="h-4 w-4 mr-2" />
             Funds
           </TabsTrigger>
-          <TabsTrigger value="mandates">
+          <TabsTrigger
+            value="mandates"
+            className="rounded-lg data-[state=active]:bg-amber-100 data-[state=active]:text-amber-900 data-[state=active]:shadow-sm"
+          >
             <ScrollText className="h-4 w-4 mr-2" />
             Mandate Templates
           </TabsTrigger>
@@ -671,12 +678,14 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
 
         <TabsContent value="funds" className="space-y-6 mt-6">
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Funds"
           value={funds.length.toString()}
           description="Funds in your organization"
           icon={Wallet}
+          iconTint="amber"
+          className="rounded-2xl border-slate-200 shadow-sm hover:shadow-md transition-all"
         />
         <StatCard
           title="Active Funds"
@@ -684,6 +693,8 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           description="Currently active"
           trend="neutral"
           icon={Target}
+          iconTint="amber"
+          className="rounded-2xl border-slate-200 shadow-sm hover:shadow-md transition-all"
         />
         <StatCard
           title="Inactive Funds"
@@ -691,6 +702,8 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           description="Paused or closed"
           trend="neutral"
           icon={DollarSign}
+          iconTint="amber"
+          className="rounded-2xl border-slate-200 shadow-sm hover:shadow-md transition-all"
         />
         <StatCard
           title="Mandate Templates"
@@ -698,24 +711,26 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           description="Available templates"
           trend="neutral"
           icon={TrendingUp}
+          iconTint="amber"
+          className="rounded-2xl border-slate-200 shadow-sm hover:shadow-md transition-all"
         />
       </div>
 
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="px-3 py-1">
+          <Badge variant="outline" className="px-3 py-1 rounded-full border-amber-200 bg-amber-50 text-amber-800">
             {funds.length} Funds
           </Badge>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-slate-500">
             {activeFunds} active, {inactiveFunds} inactive
           </span>
         </div>
 
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-amber-50/50 rounded-xl border border-amber-200/60 p-1">
           <Button
             variant={view === "grid" ? "secondary" : "ghost"}
             size="sm"
-            className="h-8 px-3"
+            className={cn("h-8 px-3 rounded-lg", view === "grid" && "bg-amber-100 text-amber-900 hover:bg-amber-200")}
             onClick={() => setView("grid")}
           >
             <LayoutGrid className="h-4 w-4 mr-2" />
@@ -724,7 +739,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           <Button
             variant={view === "table" ? "secondary" : "ghost"}
             size="sm"
-            className="h-8 px-3"
+            className={cn("h-8 px-3 rounded-lg", view === "table" && "bg-amber-100 text-amber-900 hover:bg-amber-200")}
             onClick={() => setView("table")}
           >
             <List className="h-4 w-4 mr-2" />
@@ -734,16 +749,26 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
       </div>
 
       {funds.length === 0 ? (
-        <EmptyState
-          icon={Wallet}
-          title="No funds created yet."
-          description="Create your first fund to begin."
-          action={{ label: "Create Fund", onClick: () => setIsCreateFundOpen(true) }}
-        />
+        <div className="flex flex-col items-center justify-center py-16 px-6 text-center rounded-2xl border border-dashed border-amber-200 bg-amber-50/30">
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-amber-100 border border-amber-200/60 mb-5">
+            <Wallet className="h-10 w-10 text-amber-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">No funds created yet</h3>
+          <p className="text-sm text-slate-500 max-w-sm mb-6">
+            Create your first fund to begin managing investment programs and mandate templates.
+          </p>
+          <Button
+            className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm"
+            onClick={() => setIsCreateFundOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Fund
+          </Button>
+        </div>
       ) : view === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {funds.map((fund) => (
-            <Card key={fund.id} className="group hover:shadow-md transition-all duration-200">
+            <Card key={fund.id} className="group rounded-2xl border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 border-t-2 border-t-amber-400/60">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -803,7 +828,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
           ))}
         </div>
       ) : (
-        <DataCard title="All Funds" description={`${funds.length} fund${funds.length !== 1 ? "s" : ""} total`} noPadding>
+        <DataCard title="All Funds" description={`${funds.length} fund${funds.length !== 1 ? "s" : ""} total`} accent="amber" noPadding>
           <Table>
             <TableHeader>
               <TableRow>
@@ -880,27 +905,38 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
         </TabsContent>
 
         <TabsContent value="mandates" className="space-y-6 mt-6">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-500">
             Mandate files define the investment criteria used to evaluate proposals.
           </p>
           {!fundMandatesEnabled ? (
-            <EmptyState
-              icon={AlertCircle}
-              title="Fund Mandates Not Enabled"
-              description="Fund Mandates are not enabled for this tenant. Contact your SaaS Admin to enable this feature."
-            />
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center rounded-2xl border border-dashed border-amber-200 bg-amber-50/30">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-amber-100 border border-amber-200/60 mb-5">
+                <AlertCircle className="h-10 w-10 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Fund Mandates Not Enabled</h3>
+              <p className="text-sm text-slate-500 max-w-sm">
+                Fund Mandates are not enabled for this tenant. Contact your SaaS Admin to enable this feature.
+              </p>
+            </div>
           ) : mandates.length === 0 ? (
-            <EmptyState
-              icon={ScrollText}
-              title="No Mandate Templates"
-              description="Create your first fund mandate template to get started."
-              action={{
-                label: "Create Template",
-                onClick: () => setIsCreateOpen(true),
-              }}
-            />
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center rounded-2xl border border-dashed border-amber-200 bg-amber-50/30">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-amber-100 border border-amber-200/60 mb-5">
+                <ScrollText className="h-10 w-10 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">No Mandate Templates</h3>
+              <p className="text-sm text-slate-500 max-w-sm mb-6">
+                Create your first fund mandate template to define investment criteria for proposals.
+              </p>
+              <Button
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm"
+                onClick={() => setIsCreateOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Template
+              </Button>
+            </div>
           ) : (
-            <DataCard title="Fund Mandate Templates" description={`${mandates.length} template${mandates.length !== 1 ? "s" : ""}`} noPadding>
+            <DataCard title="Fund Mandate Templates" description={`${mandates.length} template${mandates.length !== 1 ? "s" : ""}`} accent="amber" noPadding>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1083,7 +1119,7 @@ export default function FundsClient({ funds: initialFunds, fundMandatesEnabled, 
 
           {/* Azure Blob Storage Mandate Templates */}
           {canManageFundMandates && (
-            <Card className="mt-6">
+            <Card className="mt-6 rounded-2xl border-slate-200 shadow-sm border-t-2 border-t-amber-400/60">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>

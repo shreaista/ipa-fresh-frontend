@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { PageHeader, DataCard, EmptyState } from "@/components/app";
+import { PageHero, DataCard, EmptyState } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -128,7 +128,7 @@ export default function FundManagerClient({ isReadOnly = false }: FundManagerCli
   if (loading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Fund Manager Dashboard" subtitle="Decision-making overview for investment committee" />
+        <PageHero variant="funds" title="Fund Manager Dashboard" subtitle="Decision-making overview for investment committee" />
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -139,7 +139,7 @@ export default function FundManagerClient({ isReadOnly = false }: FundManagerCli
   if (!data) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Fund Manager Dashboard" subtitle="Decision-making overview for investment committee" />
+        <PageHero variant="funds" title="Fund Manager Dashboard" subtitle="Decision-making overview for investment committee" />
         <EmptyState
           title="Unable to load data"
           description="There was an error loading the fund manager dashboard. Please try again."
@@ -165,7 +165,8 @@ export default function FundManagerClient({ isReadOnly = false }: FundManagerCli
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PageHero
+        variant="funds"
         title="Fund Manager Dashboard"
         subtitle="Decision-making overview for investment committee"
         actions={

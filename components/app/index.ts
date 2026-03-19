@@ -1,4 +1,5 @@
 export { PageHeader } from "./PageHeader";
+export { PageHero } from "./PageHero";
 export { StatCard } from "./StatCard";
 export { DataCard } from "./DataCard";
 export { EmptyState } from "./EmptyState";

@@ -9,7 +9,18 @@ interface DataCardProps {
   noPadding?: boolean;
   titleClassName?: string;
   titleBadges?: React.ReactNode;
+  /** Subtle colored top border: amber, blue, violet, indigo, emerald, rose */
+  accent?: "amber" | "blue" | "violet" | "indigo" | "emerald" | "rose";
 }
+
+const accentBorder: Record<NonNullable<DataCardProps["accent"]>, string> = {
+  amber: "border-t-2 border-t-amber-400/60",
+  blue: "border-t-2 border-t-blue-400/60",
+  violet: "border-t-2 border-t-violet-400/60",
+  indigo: "border-t-2 border-t-indigo-400/60",
+  emerald: "border-t-2 border-t-emerald-400/60",
+  rose: "border-t-2 border-t-rose-400/60",
+};
 
 export function DataCard({
   title,
@@ -20,22 +31,24 @@ export function DataCard({
   noPadding = false,
   titleClassName,
   titleBadges,
+  accent,
 }: DataCardProps) {
   return (
     <div
     className={cn(
-      "rounded-2xl border border-gray-200 bg-card overflow-hidden shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
+      "rounded-2xl border border-slate-200 bg-card overflow-hidden shadow-sm transition-all duration-200 hover:shadow-md",
+      accent && accentBorder[accent],
       className
     )}
   >
-      <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6 sm:py-5 border-b border-gray-200/80 bg-muted/30">
+      <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6 sm:py-5 border-b border-slate-200/80 bg-muted/30">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className={cn("text-lg font-semibold truncate", titleClassName)}>{title}</h3>
+            <h3 className={cn("text-lg font-semibold text-slate-900 truncate", titleClassName)}>{title}</h3>
             {titleBadges}
           </div>
           {description && (
-            <p className="text-sm text-gray-500 mt-0.5 truncate font-normal">
+            <p className="text-sm text-slate-500 mt-0.5 truncate font-normal">
               {description}
             </p>
           )}

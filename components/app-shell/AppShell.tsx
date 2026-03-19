@@ -26,7 +26,7 @@ export function AppShell({ user, navItems, permissions, activeTenantId, children
 
   return (
     <RoleProvider role={user.role} isReadOnly={isReadOnly}>
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
       <Topbar
         user={user}
         pageTitle={pageTitle}
@@ -51,9 +51,9 @@ export function AppShell({ user, navItems, permissions, activeTenantId, children
           onClose={() => setMobileMenuOpen(false)}
         />
 
-        <main className="flex-1 min-h-[calc(100vh-3.5rem)] bg-gradient-to-b from-gray-50 to-gray-100">
+        <main className="flex-1 min-h-[calc(100vh-3.5rem)] bg-gradient-to-b from-slate-50 via-white to-slate-100">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-            <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 space-y-6">
+            <div className="rounded-3xl bg-white/85 backdrop-blur-sm border border-slate-200/80 shadow-sm p-6 space-y-6">
               {children}
             </div>
           </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { PageHeader, DataCard } from "@/components/app";
+import { PageHero, DataCard } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -162,7 +162,8 @@ export default function AuditLogClient() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PageHero
+        variant="audit"
         title="Audit Log"
         subtitle="Track user actions and system events"
         actions={
