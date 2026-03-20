@@ -76,6 +76,25 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
+// Investment Report (from tenant generate-report API)
+interface InvestmentReport {
+  reportId: string;
+  proposalId: string;
+  title: string;
+  generatedAt: string;
+  score: number | null;
+  confidence: "low" | "medium" | "high";
+  summary: string;
+  investmentThesis: string;
+  strengths: string[];
+  risks: string[];
+  recommendations: string[];
+  validationSummary: string;
+  fitSummary: string;
+  decision: "Review" | "Invest" | "Pass";
+  warnings?: string[];
+}
+
 // Types for fund selection
 interface FundOption {
   id: string;
@@ -715,8 +734,10 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
   // Memo generation state
   const [generatingMemo, setGeneratingMemo] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
-  const [displayedReport, setDisplayedReport] = useState<EvaluationReport | null>(null);
+  const [displayedReport] = useState<EvaluationReport | null>(null);
+  const [investmentReport, setInvestmentReport] = useState<InvestmentReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("documents");
   const [memos, setMemos] = useState<MemoMetadata[]>([]);
   const [latestMemoBlobPath, setLatestMemoBlobPath] = useState<string | null>(null);
   const [latestMemoFileName, setLatestMemoFileName] = useState<string | null>(null);
@@ -751,45 +772,42 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
     }
   }, [proposal?.id, loadMemos]);
 
-  // Load generated report (when no evaluation - for AI Memo tab)
+  // Load generated report from tenant API (for AI Memo tab)
   const loadReport = useCallback(async (proposalId?: string) => {
     const id = proposalId || proposal?.id;
     if (!id) return;
     setReportLoading(true);
     try {
-      const res = await fetch(`/api/proposals/${id}/report`);
+      const res = await fetch(`/api/tenant/proposals/${id}/report`);
       const data = await res.json();
       if (data.ok && data.data.report) {
-        setDisplayedReport(data.data.report);
+        setInvestmentReport(data.data.report);
       } else {
-        setDisplayedReport(null);
+        setInvestmentReport(null);
       }
     } catch {
-      setDisplayedReport(null);
+      setInvestmentReport(null);
     }
     setReportLoading(false);
   }, [proposal?.id]);
 
   useEffect(() => {
     const id = proposal?.id;
-    if (id && !displayedEvaluation) {
-      queueMicrotask(() => { loadReport(id); });
-    } else {
-      setDisplayedReport(null);
-    }
-  }, [proposal?.id, displayedEvaluation, loadReport]);
+    if (!id) return;
+    queueMicrotask(() => { loadReport(id); });
+  }, [proposal?.id, loadReport]);
 
-  // Memo content: prefer evaluation, fallback to generated report
+  // Memo content: prefer investment report, fallback to evaluation, then old displayed report
   const memoContent = displayedEvaluation ?? displayedReport;
 
-  // Generate report via standalone API (proposal + mandate -> OpenAI -> PDF)
+  // Generate report via tenant API (full Report Engine)
   const handleGenerateReport = async () => {
     if (!proposal) return;
     setGeneratingReport(true);
     setMemoMessage(null);
 
     try {
-      const res = await fetch(`/api/proposals/${proposal.id}/generate-report`, {
+      const res = await fetch(`/api/tenant/proposals/${proposal.id}/generate-report`, {
         method: "POST",
       });
 
@@ -800,16 +818,28 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           text: "Report generated successfully",
           type: "success",
         });
-        setDisplayedReport(data.data.report);
-        await loadMemos();
+        setInvestmentReport(data.data);
+        setActiveTab("memo");
       } else {
-        setMemoMessage({ text: data.error || "Failed to generate report", type: "error" });
+        setMemoMessage({
+          text: data.error || "Failed to generate report",
+          type: "error",
+        });
       }
     } catch {
       setMemoMessage({ text: "Network error during report generation", type: "error" });
     }
 
     setGeneratingReport(false);
+  };
+
+  // Download report PDF (tenant API)
+  const handleDownloadReportPDF = () => {
+    if (!proposal) return;
+    window.open(
+      `/api/tenant/proposals/${proposal.id}/report/download`,
+      "_blank"
+    );
   };
 
   // Generate investment memo (from evaluation - requires evaluation to exist)
@@ -1109,11 +1139,11 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             <Button
               variant="outline"
               size="sm"
-              onClick={handleGenerateMemo}
-              disabled={generatingMemo || isReadOnly}
+              onClick={handleGenerateReport}
+              disabled={generatingReport || isReadOnly || documents.length === 0 || !proposal?.fund}
               className="border-indigo-200 bg-white hover:bg-indigo-50"
             >
-              {generatingMemo ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileOutput className="h-4 w-4 mr-1.5" />}
+              {generatingReport ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileOutput className="h-4 w-4 mr-1.5" />}
               Generate Report
             </Button>
             {proposal.status === "New" && (
@@ -1549,7 +1579,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
       {/* Analyst Workspace Tabs */}
       <div className="rounded-2xl border border-gray-200 bg-white shadow-md p-5">
-        <Tabs defaultValue="documents" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid rounded-xl border border-slate-200 bg-slate-100/80 p-1.5 shadow-sm">
           <TabsTrigger value="documents" className="gap-2">
             <FileText className="h-4 w-4" />
@@ -2764,10 +2794,161 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             </div>
           )}
 
-          {reportLoading && !memoContent ? (
+          {generatingReport ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="h-10 w-10 animate-spin mr-3" />
+              <span className="text-base font-medium">Generating report...</span>
+            </div>
+          ) : reportLoading && !investmentReport && !memoContent ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin mr-2" />
               <span>Loading report...</span>
+            </div>
+          ) : investmentReport ? (
+            /* Premium Investment Report View (from Report Engine) */
+            <div className="space-y-6">
+              <Card className="overflow-hidden border-2 border-indigo-100">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 p-6 bg-gradient-to-br from-indigo-50 to-blue-50 border-b">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">{investmentReport.title}</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {proposal?.name} · {proposal?.applicant} · {new Date(investmentReport.generatedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant={investmentReport.score !== null && investmentReport.score >= 70 ? "success" : investmentReport.score !== null && investmentReport.score >= 50 ? "warning" : "secondary"}
+                      className="text-sm px-3 py-1"
+                    >
+                      Score: {investmentReport.score ?? "—"}/100
+                    </Badge>
+                    <Badge
+                      variant={investmentReport.confidence === "high" ? "success" : investmentReport.confidence === "medium" ? "warning" : "secondary"}
+                      className="capitalize"
+                    >
+                      {investmentReport.confidence} Confidence
+                    </Badge>
+                    <Badge
+                      variant={investmentReport.decision === "Invest" ? "success" : investmentReport.decision === "Pass" ? "destructive" : "outline"}
+                      className="capitalize"
+                    >
+                      {investmentReport.decision}
+                    </Badge>
+                    <Button size="sm" onClick={handleDownloadReportPDF} className="bg-indigo-600 hover:bg-indigo-700">
+                      <Download className="h-4 w-4 mr-1.5" />
+                      Download PDF
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-6 space-y-6 max-w-3xl">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-indigo-500" />
+                      Executive Summary
+                    </h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">{investmentReport.summary}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <Target className="h-4 w-4 text-indigo-500" />
+                      Investment Thesis
+                    </h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">{investmentReport.investmentThesis}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                      Validation Summary
+                    </h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">{investmentReport.validationSummary}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-indigo-500" />
+                      Fund Fit Summary
+                    </h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">{investmentReport.fitSummary}</p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                    <h3 className="text-sm font-semibold text-emerald-800 mb-2 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                      Key Strengths
+                    </h3>
+                    <ul className="space-y-2">
+                      {investmentReport.strengths.length > 0 ? (
+                        investmentReport.strengths.map((s, i) => (
+                          <li key={i} className="text-sm text-emerald-800 flex items-start gap-2">
+                            <span className="text-emerald-600 font-medium">{i + 1}.</span>
+                            <span>{s}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-emerald-700/80 italic">None identified.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                    <h3 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      Key Risks
+                    </h3>
+                    <ul className="space-y-2">
+                      {investmentReport.risks.length > 0 ? (
+                        investmentReport.risks.map((r, i) => (
+                          <li key={i} className="text-sm text-amber-800 flex items-start gap-2">
+                            <span className="text-amber-600 font-medium">{i + 1}.</span>
+                            <span>{r}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-amber-700/80 italic">None identified.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+                    <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                      <Lightbulb className="h-4 w-4 text-blue-600" />
+                      Recommendations / Next Steps
+                    </h3>
+                    <ul className="space-y-2">
+                      {investmentReport.recommendations.length > 0 ? (
+                        investmentReport.recommendations.map((r, i) => (
+                          <li key={i} className="text-sm text-blue-800 flex items-start gap-2">
+                            <span className="text-blue-600 font-medium">{i + 1}.</span>
+                            <span>{r}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-blue-700/80 italic">None provided.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border-2 border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-800 mb-2">Suggested Decision</h3>
+                    <p className="text-base font-medium text-slate-900">{investmentReport.decision}</p>
+                  </div>
+                  {investmentReport.warnings && investmentReport.warnings.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/30 p-4">
+                      <h3 className="text-sm font-semibold text-amber-800 mb-2">Warnings</h3>
+                      <ul className="space-y-1 text-sm text-amber-700">
+                        {investmentReport.warnings.map((w, i) => (
+                          <li key={i}>• {w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-3 border-t bg-muted/20 flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={handleGenerateReport} disabled={generatingReport}>
+                    {generatingReport ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FileOutput className="h-4 w-4 mr-1" />}
+                    Regenerate Report
+                  </Button>
+                  <Button size="sm" onClick={handleDownloadReportPDF}>
+                    <Download className="h-4 w-4 mr-1.5" />
+                    Download PDF
+                  </Button>
+                </div>
+              </Card>
             </div>
           ) : memoContent ? (
             <>
@@ -2970,7 +3151,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           ) : (
             <DataCard
               title="AI Memo"
-              description="Generate an AI report from proposal documents and fund mandate. Upload documents and select a fund first."
+              description="No report generated yet. Generate a report to create an investment memo."
               actions={
                 <Button
                   size="sm"
@@ -2988,13 +3169,13 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             >
               <div className="py-12 text-center">
                 <FileOutput className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-sm font-medium">No report yet</p>
+                <p className="text-sm font-medium">No report generated yet</p>
                 <p className="text-sm text-muted-foreground mt-1">
                   {documents.length === 0
-                    ? "Upload proposal documents first."
+                    ? "Report could not be generated because no proposal documents were found."
                     : !proposal?.fund
                       ? "Select a fund for this proposal first."
-                      : "Click Generate Report to create an AI analysis from your proposal and fund mandate."}
+                      : "Generate a report to create an AI analysis from your proposal and fund mandate."}
                 </p>
               </div>
             </DataCard>
