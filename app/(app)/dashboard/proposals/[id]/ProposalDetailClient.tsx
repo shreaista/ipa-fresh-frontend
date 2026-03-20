@@ -714,6 +714,9 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
 
   // Memo generation state
   const [generatingMemo, setGeneratingMemo] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [displayedReport, setDisplayedReport] = useState<EvaluationReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
   const [memos, setMemos] = useState<MemoMetadata[]>([]);
   const [latestMemoBlobPath, setLatestMemoBlobPath] = useState<string | null>(null);
   const [latestMemoFileName, setLatestMemoFileName] = useState<string | null>(null);
@@ -748,7 +751,68 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
     }
   }, [proposal?.id, loadMemos]);
 
-  // Generate investment memo
+  // Load generated report (when no evaluation - for AI Memo tab)
+  const loadReport = useCallback(async (proposalId?: string) => {
+    const id = proposalId || proposal?.id;
+    if (!id) return;
+    setReportLoading(true);
+    try {
+      const res = await fetch(`/api/proposals/${id}/report`);
+      const data = await res.json();
+      if (data.ok && data.data.report) {
+        setDisplayedReport(data.data.report);
+      } else {
+        setDisplayedReport(null);
+      }
+    } catch {
+      setDisplayedReport(null);
+    }
+    setReportLoading(false);
+  }, [proposal?.id]);
+
+  useEffect(() => {
+    const id = proposal?.id;
+    if (id && !displayedEvaluation) {
+      queueMicrotask(() => { loadReport(id); });
+    } else {
+      setDisplayedReport(null);
+    }
+  }, [proposal?.id, displayedEvaluation, loadReport]);
+
+  // Memo content: prefer evaluation, fallback to generated report
+  const memoContent = displayedEvaluation ?? displayedReport;
+
+  // Generate report via standalone API (proposal + mandate -> OpenAI -> PDF)
+  const handleGenerateReport = async () => {
+    if (!proposal) return;
+    setGeneratingReport(true);
+    setMemoMessage(null);
+
+    try {
+      const res = await fetch(`/api/proposals/${proposal.id}/generate-report`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (data.ok) {
+        setMemoMessage({
+          text: "Report generated successfully",
+          type: "success",
+        });
+        setDisplayedReport(data.data.report);
+        await loadMemos();
+      } else {
+        setMemoMessage({ text: data.error || "Failed to generate report", type: "error" });
+      }
+    } catch {
+      setMemoMessage({ text: "Network error during report generation", type: "error" });
+    }
+
+    setGeneratingReport(false);
+  };
+
+  // Generate investment memo (from evaluation - requires evaluation to exist)
   const handleGenerateMemo = async () => {
     if (!proposal) return;
     setGeneratingMemo(true);
@@ -2700,7 +2764,12 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
             </div>
           )}
 
-          {displayedEvaluation ? (
+          {reportLoading && !memoContent ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin mr-2" />
+              <span>Loading report...</span>
+            </div>
+          ) : memoContent ? (
             <>
               {/* Premium AI Memo Document */}
               <Card className="overflow-hidden">
@@ -2715,18 +2784,27 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge
-                        variant={displayedEvaluation.confidence === "high" ? "success" : displayedEvaluation.confidence === "medium" ? "warning" : "secondary"}
+                        variant={memoContent.confidence === "high" ? "success" : memoContent.confidence === "medium" ? "warning" : "secondary"}
                         className="capitalize"
                       >
-                        {displayedEvaluation.confidence} Confidence
+                        {memoContent.confidence} Confidence
                       </Badge>
                       <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={handleGenerateMemo} disabled={generatingMemo}>
-                          {generatingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileOutput className="h-4 w-4" />}
-                        </Button>
+                        {displayedEvaluation ? (
+                          <Button size="sm" variant="outline" onClick={handleGenerateMemo} disabled={generatingMemo}>
+                            {generatingMemo ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileOutput className="h-4 w-4" />}
+                            <span className="ml-1.5">Regenerate PDF</span>
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={handleGenerateReport} disabled={generatingReport}>
+                            {generatingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileOutput className="h-4 w-4" />}
+                            <span className="ml-1.5">Regenerate Report</span>
+                          </Button>
+                        )}
                         {latestMemoBlobPath && (
                           <Button size="sm" variant="outline" onClick={() => handleDownloadMemo()}>
-                            <Download className="h-4 w-4" />
+                            <Download className="h-4 w-4 mr-1.5" />
+                            Download PDF
                           </Button>
                         )}
                       </div>
@@ -2740,7 +2818,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                   <MemoSection
                     title="Executive Summary"
                     icon={Sparkles}
-                    content={displayedEvaluation.proposalSummary}
+                    content={memoContent.proposalSummary}
                     explainKey="exec-summary"
                     explainContent="This summary is generated by the AI from the proposal documents and mandate alignment. It captures the core opportunity and fit."
                     expanded={memoExpanded}
@@ -2752,9 +2830,9 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     title="Investment Highlights"
                     icon={TrendingUp}
                     content={
-                      (displayedEvaluation.strengths?.length ?? 0) > 0 ? (
+                      (memoContent.strengths?.length ?? 0) > 0 ? (
                       <ul className="space-y-2">
-                        {(displayedEvaluation.strengths ?? []).map((s, i) => (
+                        {(memoContent.strengths ?? []).map((s, i) => (
                           <li key={i} className="flex items-start gap-2">
                             <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
                             <span>{s}</span>
@@ -2776,9 +2854,9 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                     title="Key Risks"
                     icon={AlertTriangle}
                     content={
-                      (displayedEvaluation.risks?.length ?? 0) > 0 ? (
+                      (memoContent.risks?.length ?? 0) > 0 ? (
                       <ul className="space-y-3">
-                        {(displayedEvaluation.risks ?? []).map((risk, i) => (
+                        {(memoContent.risks ?? []).map((risk, i) => (
                           <li key={i} className="flex items-start gap-2">
                             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                             <div>
@@ -2808,15 +2886,15 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                           <span className="text-muted-foreground">Requested Amount</span>
                           <span className="font-medium">{proposal ? formatAmount(proposal.amount) : "—"}</span>
                         </div>
-                        {displayedEvaluation.structuredScores && (
+                        {memoContent.structuredScores && (
                           <div className="grid gap-2 sm:grid-cols-2">
                             <div className="flex justify-between text-sm py-1">
                               <span className="text-muted-foreground">Sector Fit</span>
-                              <span>{displayedEvaluation.structuredScores.sectorFit}/25</span>
+                              <span>{memoContent.structuredScores.sectorFit}/25</span>
                             </div>
                             <div className="flex justify-between text-sm py-1">
                               <span className="text-muted-foreground">Ticket Size Fit</span>
-                              <span>{displayedEvaluation.structuredScores.ticketSizeFit}/15</span>
+                              <span>{memoContent.structuredScores.ticketSizeFit}/15</span>
                             </div>
                           </div>
                         )}
@@ -2836,26 +2914,26 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
-                            (displayedEvaluation.fitScore ?? 0) >= 70 ? "bg-emerald-100" :
-                            (displayedEvaluation.fitScore ?? 0) >= 50 ? "bg-amber-100" : "bg-red-100"
+                            (memoContent.fitScore ?? 0) >= 70 ? "bg-emerald-100" :
+                            (memoContent.fitScore ?? 0) >= 50 ? "bg-amber-100" : "bg-red-100"
                           }`}>
                             <span className={`text-lg font-bold ${
-                              (displayedEvaluation.fitScore ?? 0) >= 70 ? "text-emerald-700" :
-                              (displayedEvaluation.fitScore ?? 0) >= 50 ? "text-amber-700" : "text-red-700"
+                              (memoContent.fitScore ?? 0) >= 70 ? "text-emerald-700" :
+                              (memoContent.fitScore ?? 0) >= 50 ? "text-amber-700" : "text-red-700"
                             }`}>
-                              {displayedEvaluation.fitScore ?? "—"}
+                              {memoContent.fitScore ?? "—"}
                             </span>
                           </div>
                           <div>
                             <p className="font-medium">
-                              {(displayedEvaluation.fitScore ?? 0) >= 70 ? "Proceed" :
-                               (displayedEvaluation.fitScore ?? 0) >= 50 ? "Proceed with conditions" : "Defer or decline"}
+                              {(memoContent.fitScore ?? 0) >= 70 ? "Proceed" :
+                               (memoContent.fitScore ?? 0) >= 50 ? "Proceed with conditions" : "Defer or decline"}
                             </p>
-                            <p className="text-sm text-muted-foreground">Fit Score: {displayedEvaluation.fitScore ?? "—"}/100</p>
+                            <p className="text-sm text-muted-foreground">Fit Score: {memoContent.fitScore ?? "—"}/100</p>
                           </div>
                         </div>
                         <ul className="space-y-2 mt-3">
-                          {(displayedEvaluation.recommendations ?? []).slice(0, 3).map((r, i) => (
+                          {(memoContent.recommendations ?? []).slice(0, 3).map((r, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm">
                               <Lightbulb className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                               <span>{r}</span>
@@ -2881,7 +2959,7 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
                         <span className="text-sm truncate">{m.fileName}</span>
                         <Button variant="ghost" size="sm" onClick={() => handleDownloadMemo(m.blobPath)}>
                           <Download className="h-3.5 w-3.5 mr-1" />
-                          Download
+                          Download PDF
                         </Button>
                       </div>
                     ))}
@@ -2892,18 +2970,32 @@ export default function ProposalDetailClient({ proposal, canAssign, canManageDoc
           ) : (
             <DataCard
               title="AI Memo"
-              description="Run an evaluation to generate the investment memo"
+              description="Generate an AI report from proposal documents and fund mandate. Upload documents and select a fund first."
               actions={
-                <Button size="sm" disabled>
-                  <FileOutput className="h-4 w-4 mr-1" />
+                <Button
+                  size="sm"
+                  onClick={handleGenerateReport}
+                  disabled={generatingReport || documents.length === 0 || !proposal?.fund}
+                >
+                  {generatingReport ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <FileOutput className="h-4 w-4 mr-1" />
+                  )}
                   Generate Report
                 </Button>
               }
             >
               <div className="py-12 text-center">
                 <FileOutput className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-sm font-medium">No evaluation yet</p>
-                <p className="text-sm text-muted-foreground mt-1">Run a fund evaluation first to generate the AI memo.</p>
+                <p className="text-sm font-medium">No report yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {documents.length === 0
+                    ? "Upload proposal documents first."
+                    : !proposal?.fund
+                      ? "Select a fund for this proposal first."
+                      : "Click Generate Report to create an AI analysis from your proposal and fund mandate."}
+                </p>
               </div>
             </DataCard>
           )}
